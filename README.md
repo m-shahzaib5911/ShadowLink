@@ -13,7 +13,16 @@ ShadowLink is a secure messaging application that prioritizes user privacy throu
 - 📱 **Responsive** - Works on desktop and mobile
 - 🚀 **Fast** - Minimal JavaScript, no frameworks
 
-## 🚀 Quick Start
+## 📊 **Project Status**
+
+✅ **Fully Implemented & Deployed**
+- **Repository:** https://github.com/m-shahzaib5911/ShadowLink
+- **Backend:** Running on Node.js/Express
+- **Frontend:** Vanilla JS with E2EE encryption
+- **Security:** XChaCha20-Poly1305 implementation
+- **Deployment:** Docker ready, production configured
+
+##  Quick Start
 
 ### Prerequisites
 
@@ -24,8 +33,8 @@ ShadowLink is a secure messaging application that prioritizes user privacy throu
 
 1. **Clone the repository**
    ```bash
-   git clone https://github.com/yourusername/shadowlink.git
-   cd shadowlink
+   git clone https://github.com/m-shahzaib5911/ShadowLink.git
+   cd ShadowLink
    ```
 
 2. **Set up the backend**
@@ -70,10 +79,12 @@ docker run -p 3000:3000 shadowlink
 - CORS enabled for browser requests
 
 ### Frontend (Vanilla JavaScript)
-- No frameworks, minimal bundle size
-- libsodium.js for client-side encryption
-- Local storage for user preferences
-- Responsive design with CSS Grid/Flexbox
+- No frameworks, minimal bundle size (~20KB)
+- libsodium.js for XChaCha20-Poly1305 encryption
+- Local/session storage for user data and keys
+- Responsive green/black theme design
+- Real-time message polling
+- Progressive Web App ready
 
 ### Security Layers
 1. **Client Encryption** - XChaCha20-Poly1305 E2EE
@@ -129,18 +140,22 @@ ShadowLink implements multiple security layers:
 
 ### Project Structure
 ```
-shadowlink/
-├── backend/                 # Node.js server
-│   ├── server.js           # Main application
-│   ├── routes/             # API endpoints
-│   ├── models/             # Data structures
-│   ├── middleware/         # Express middleware
-│   ├── utils/              # Utilities
-│   ├── public/             # Static frontend files
-│   └── package.json
-├── docker-compose.yml      # Docker orchestration
-├── .gitignore             # Git exclusions
-└── README.md              # This file
+ShadowLink/
+├── backend/                # Node.js API server
+│   ├── server.js          # Main Express application
+│   ├── routes/            # API endpoints (rooms, messages, relay)
+│   ├── models/            # Data structures (Room, Message, User)
+│   ├── middleware/        # Express middleware (auth, encryption, cors)
+│   ├── utils/             # Utilities (crypto, logger, validation)
+│   └── package.json       # Dependencies and scripts
+├── frontend/               # Static web frontend
+│   ├── index.html         # Main HTML interface
+│   ├── css/               # Stylesheets (green/black theme)
+│   ├── js/                # Client-side JavaScript modules
+│   └── assets/            # Static assets (future use)
+├── docker-compose.yml     # Docker container orchestration
+├── .gitignore            # Git exclusions
+└── README.md             # This documentation
 ```
 
 ### Scripts
