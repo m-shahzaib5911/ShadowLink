@@ -1,5 +1,6 @@
 const express = require('express');
 const helmet = require('helmet');
+const path = require('path');
 require('dotenv').config();
 
 // Import custom middleware
@@ -42,11 +43,11 @@ app.use('/api/messages', require('./routes/messages'));
 app.use('/api/relay', require('./routes/relay'));
 
 // Serve static frontend files
-app.use(express.static('public'));
+app.use(express.static(path.join(__dirname, '../frontend')));
 
 // Catch-all handler: send back index.html for SPA
 app.get('*', (req, res) => {
-  res.sendFile(__dirname + '/public/index.html');
+  res.sendFile(path.join(__dirname, '../frontend/index.html'));
 });
 
 // 404 handler
