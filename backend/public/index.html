@@ -1,0 +1,167 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="ShadowLink - End-to-End Encrypted Messaging">
+    <meta name="theme-color" content="#1a1a1a">
+    <title>ShadowLink - Secure Messaging</title>
+
+    <!-- CSS Files -->
+    <link rel="stylesheet" href="/css/style.css">
+    <link rel="stylesheet" href="/css/responsive.css">
+
+    <!-- Favicon -->
+    <link rel="icon" href="/favicon.ico" type="image/x-icon">
+
+    <!-- Preload critical resources -->
+    <link rel="preload" href="/js/libsodium.js" as="script">
+    <link rel="preload" href="/js/app.js" as="script">
+</head>
+<body>
+    <!-- Loading Screen -->
+    <div id="loading" class="loading-screen">
+        <div class="loading-spinner"></div>
+        <h2>Initializing ShadowLink...</h2>
+        <p>Setting up end-to-end encryption</p>
+    </div>
+
+    <!-- Main Application -->
+    <div id="app" class="app hidden">
+        <!-- Main App Interface -->
+        <div id="main-app" class="main-app">
+            <!-- Header -->
+            <header class="app-header">
+                <div class="logo">
+                    <h1>ShadowLink</h1>
+                </div>
+                <div class="status">
+                    <span id="connection-status" class="status-indicator">🔴 Offline</span>
+                </div>
+            </header>
+
+            <!-- Main Content -->
+            <main class="app-main">
+                <!-- Sidebar -->
+                <aside id="sidebar" class="sidebar">
+                    <div class="sidebar-header">
+                        <button id="create-room-btn" class="btn btn-primary">Create New Room</button>
+                    </div>
+                    <div class="rooms-list">
+                        <h3>Active Rooms</h3>
+                        <ul id="rooms-list" class="rooms-list-items">
+                            <!-- Rooms will be populated here -->
+                        </ul>
+                    </div>
+                </aside>
+
+                <!-- Chat Area -->
+                <section id="chat-area" class="chat-area">
+                    <div id="welcome-screen" class="welcome-screen">
+                        <div class="welcome-content">
+                            <h2>Welcome to ShadowLink</h2>
+                            <p>Create a new room or join an existing one to start secure messaging.</p>
+                            <div class="welcome-actions">
+                                <button id="welcome-create-btn" class="btn btn-primary">Create Room</button>
+                                <button id="welcome-join-btn" class="btn btn-secondary">Join Room</button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div id="chat-container" class="chat-container hidden">
+                        <div class="chat-header">
+                            <h3 id="room-title">Room</h3>
+                            <div class="room-info">
+                                <span id="room-users">0 users</span>
+                                <button id="share-room-btn" class="btn btn-small">Share</button>
+                                <button id="leave-room-btn" class="btn btn-small btn-danger">Leave</button>
+                            </div>
+                        </div>
+
+                        <div id="messages-container" class="messages-container">
+                            <!-- Messages will be populated here -->
+                        </div>
+
+                        <div class="message-input-area">
+                            <form id="message-form" class="message-form">
+                                <input
+                                    type="text"
+                                    id="message-input"
+                                    placeholder="Type your encrypted message..."
+                                    maxlength="1000"
+                                    autocomplete="off"
+                                >
+                                <button type="submit" id="send-btn" class="btn btn-primary">Send</button>
+                            </form>
+                        </div>
+                    </div>
+                </section>
+            </main>
+        </div>
+
+        <!-- Modals -->
+        <!-- Share Room Modal -->
+        <div id="share-modal" class="modal hidden">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h3>Share Room</h3>
+                    <button class="modal-close">&times;</button>
+                </div>
+                <div class="modal-body">
+                    <p>Share this room link with others:</p>
+                    <div class="share-link-container">
+                        <input type="text" id="share-link" readonly>
+                        <button id="copy-link-btn" class="btn btn-secondary">Copy</button>
+                    </div>
+                    <div class="qr-code-container">
+                        <p>Or scan this QR code:</p>
+                        <div id="qr-code"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Join Room Modal -->
+        <div id="join-modal" class="modal hidden">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h3>Join Room</h3>
+                    <button class="modal-close">&times;</button>
+                </div>
+                <div class="modal-body">
+                    <p>Enter the room ID to join:</p>
+                    <form id="join-form">
+                        <input
+                            type="text"
+                            id="join-room-id"
+                            placeholder="Room ID (e.g., abc123-def456)"
+                            required
+                        >
+                        <button type="submit" class="btn btn-primary">Join Room</button>
+                    </form>
+                </div>
+            </div>
+        </div>
+
+        <!-- Notifications -->
+        <div id="notifications" class="notifications">
+            <!-- Notifications will appear here -->
+        </div>
+    </div>
+
+    <!-- JavaScript Files -->
+    <script src="/js/vendor/libsodium.js"></script>
+    <script type="module" src="/js/app.js"></script>
+    <script type="module" src="/js/crypto.js"></script>
+    <script type="module" src="/js/api.js"></script>
+    <script type="module" src="/js/ui.js"></script>
+    <script type="module" src="/js/storage.js"></script>
+
+    <!-- Service Worker (optional) -->
+    <!-- <script>
+        if ('serviceWorker' in navigator) {
+            navigator.serviceWorker.register('/service-worker.js');
+        }
+    </script> -->
+</body>
+</html>
