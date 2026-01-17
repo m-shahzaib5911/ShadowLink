@@ -6,7 +6,6 @@ const users = new Map(); // userId -> User object
 
 // Periodic cleanup of expired rooms and messages
 setInterval(() => {
-  const now = new Date();
   for (const [roomId, room] of rooms) {
     if (room.isExpired()) {
       rooms.delete(roomId);

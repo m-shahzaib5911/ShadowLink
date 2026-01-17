@@ -12,6 +12,7 @@ ShadowLink is a secure messaging application that prioritizes user privacy throu
 - 🌐 **Decentralized** - Can operate on multiple relay nodes
 - 📱 **Responsive** - Works on desktop and mobile
 - 🚀 **Fast** - Minimal JavaScript, no frameworks
+- ⚡ **Real-time** - WebSocket-powered instant messaging
 
 ## 📊 **Project Status**
 
@@ -227,7 +228,6 @@ This is a proof-of-concept implementation. For production use:
 - Implement rate limiting
 - Add monitoring and alerting
 - Use a proper database for persistence
-- Implement WebSocket support for real-time messaging
 - Add user authentication if needed
 
 ## 🔗 Links

@@ -9,14 +9,13 @@ import ui from './ui.js';
 import storage from './storage.js';
 
 class ShadowLink {
-  constructor() {
-    this.userId = null;
-    this.currentRoomId = null;
-    this.currentRoomKey = null;
-    this.rooms = new Map();
-    this.messageUpdateInterval = null;
-    this.isInitialized = false;
-  }
+  userId = null;
+  currentRoomId = null;
+  currentRoomKey = null;
+  rooms = new Map();
+  messageUpdateInterval = null;
+  websocket = null;
+  isInitialized = false;
 
   /**
    * Initialize the application
@@ -36,14 +35,14 @@ class ShadowLink {
         storage.saveUserId(this.userId);
       }
 
-      // Load joined rooms
-      const joinedRooms = storage.getJoinedRooms();
-      for (const roomId of joinedRooms) {
-        const key = storage.getRoomKey(roomId);
-        if (key) {
-          this.rooms.set(roomId, { id: roomId, key });
-        }
-      }
+      // Load joined rooms (disabled for fresh start on refresh)
+      // const joinedRooms = storage.getJoinedRooms();
+      // for (const roomId of joinedRooms) {
+      //   const key = storage.getRoomKey(roomId);
+      //   if (key) {
+      //     this.rooms.set(roomId, { id: roomId, key });
+      //   }
+      // }
 
       // Set up event listeners
       this.setupEventListeners();
@@ -61,7 +60,7 @@ class ShadowLink {
         ui.showChat();
       }
 
-      ui.showNotification('ShadowLink ready!', 'success');
+      ui.showNotification('ShadowLink ready!', 'info');
     } catch (error) {
       console.error('Initialization failed:', error);
       ui.showNotification('Failed to initialize ShadowLink', 'error');
@@ -73,7 +72,7 @@ class ShadowLink {
    * Generate a unique user ID
    */
   generateUserId() {
-    return 'user_' + Math.random().toString(36).substr(2, 9);
+    return 'user_' + Math.random().toString(36).substring(2, 11);
   }
 
   /**
@@ -91,9 +90,12 @@ class ShadowLink {
     document.getElementById('join-form').addEventListener('submit', (e) => {
       e.preventDefault();
       const roomId = document.getElementById('join-room-id').value.trim();
-      if (roomId) {
-        this.joinRoom(roomId);
+      const roomKey = document.getElementById('join-room-key').value.trim();
+      if (roomId && roomKey) {
+        this.joinRoom(roomId, roomKey);
         ui.hideModal('join-modal');
+      } else {
+        ui.showNotification('Please enter both Room ID and Key', 'error');
       }
     });
 
@@ -164,27 +166,16 @@ class ShadowLink {
   /**
    * Join an existing room
    */
-  async joinRoom(roomId) {
+  async joinRoom(roomId, roomKey) {
     try {
       ui.showNotification('Joining room...', 'info');
 
-      const response = await api.joinRoom(roomId, this.userId);
-      const { roomInfo } = response;
+      await api.joinRoom(roomId, this.userId);
 
-      // Store room key if not already stored
-      if (!storage.getRoomKey(roomId)) {
-        // For joining existing rooms, we need the key from URL or user input
-        // For now, assume it's shared via URL hash
-        const urlKey = this.getRoomKeyFromUrl();
-        if (urlKey) {
-          storage.saveRoomKey(roomId, urlKey);
-        } else {
-          ui.showNotification('Room key required to join', 'error');
-          return;
-        }
-      }
+      // Store the provided room key
+      storage.saveRoomKey(roomId, roomKey);
 
-      this.rooms.set(roomId, { id: roomId, key: storage.getRoomKey(roomId) });
+      this.rooms.set(roomId, { id: roomId, key: roomKey });
       storage.addJoinedRoom(roomId);
 
       ui.showNotification('Joined room!', 'success');
@@ -206,6 +197,9 @@ class ShadowLink {
       return;
     }
 
+    // Disconnect from previous WebSocket if connected
+    this.disconnectWebSocket();
+
     this.currentRoomId = roomId;
     this.currentRoomKey = this.rooms.get(roomId).key;
 
@@ -223,8 +217,8 @@ class ShadowLink {
     // Load messages
     await this.loadMessages();
 
-    // Start polling for new messages
-    this.startMessagePolling();
+    // Connect to WebSocket for real-time updates
+    this.connectWebSocket(roomId);
   }
 
   /**
@@ -247,15 +241,6 @@ class ShadowLink {
 
       // Clear input
       input.value = '';
-
-      // Display locally (optimistic update)
-      const localMessage = {
-        id: 'temp_' + Date.now(),
-        userId: this.userId,
-        plaintext: message,
-        timestamp: new Date().toISOString()
-      };
-      ui.displayMessage(localMessage, true);
 
     } catch (error) {
       console.error('Send message failed:', error);
@@ -302,7 +287,97 @@ class ShadowLink {
   }
 
   /**
-   * Start polling for new messages
+   * Connect to WebSocket for real-time messaging
+   */
+  connectWebSocket(roomId) {
+    if (this.websocket && this.websocket.readyState === WebSocket.OPEN) {
+      return; // Already connected
+    }
+
+    const protocol = globalThis.location.protocol === 'https:' ? 'wss:' : 'ws:';
+    const wsUrl = `${protocol}//${globalThis.location.host}?roomId=${roomId}&userId=${this.userId}`;
+
+    this.websocket = new WebSocket(wsUrl);
+
+    this.websocket.onopen = () => {
+      console.log('WebSocket connected');
+      ui.updateConnectionStatus(true);
+      // Stop polling since we have real-time updates
+      this.stopMessagePolling();
+    };
+
+    this.websocket.onmessage = (event) => {
+      try {
+        const data = JSON.parse(event.data);
+        this.handleWebSocketMessage(data);
+      } catch (error) {
+        console.error('WebSocket message error:', error);
+      }
+    };
+
+    this.websocket.onclose = () => {
+      console.log('WebSocket disconnected');
+      ui.updateConnectionStatus(false);
+      // Fall back to polling if WebSocket disconnects
+      this.startMessagePolling();
+    };
+
+    this.websocket.onerror = (error) => {
+      console.error('WebSocket error:', error);
+      ui.updateConnectionStatus(false);
+    };
+  }
+
+  /**
+   * Handle incoming WebSocket messages
+   */
+  async handleWebSocketMessage(data) {
+    if (data.type === 'new_message') {
+      const message = data.message;
+
+      // Only process if it's for the current room
+      if (message.roomId === this.currentRoomId) {
+        try {
+          // Decrypt the message
+          const plaintext = await crypto.decryptMessage(
+            message.encryptedMessage,
+            message.iv,
+            message.salt,
+            this.currentRoomKey
+          );
+
+          const displayMessage = {
+            id: message.id,
+            userId: message.userId,
+            plaintext,
+            timestamp: message.timestamp
+          };
+
+          // Display the message
+          ui.displayMessage(displayMessage, message.userId === this.userId);
+
+          // Add to local message cache (optional)
+          // You could maintain a local cache if needed
+
+        } catch (error) {
+          console.error('Failed to decrypt WebSocket message:', error);
+        }
+      }
+    }
+  }
+
+  /**
+   * Disconnect WebSocket
+   */
+  disconnectWebSocket() {
+    if (this.websocket) {
+      this.websocket.close();
+      this.websocket = null;
+    }
+  }
+
+  /**
+   * Start polling for new messages (fallback when WebSocket unavailable)
    */
   startMessagePolling() {
     this.stopMessagePolling(); // Stop any existing polling
@@ -333,7 +408,11 @@ class ShadowLink {
       return;
     }
 
-    const shareUrl = `${window.location.origin}${window.location.pathname}#room=${this.currentRoomId}&key=${this.currentRoomKey}`;
+    // Populate share fields
+    document.getElementById('share-room-id').value = this.currentRoomId;
+    document.getElementById('share-room-key').value = this.currentRoomKey;
+
+    const shareUrl = `${globalThis.location.origin}${globalThis.location.pathname}#room=${this.currentRoomId}&key=${this.currentRoomKey}`;
     document.getElementById('share-link').value = shareUrl;
 
     ui.showModal('share-modal');
@@ -360,6 +439,7 @@ class ShadowLink {
       this.rooms.delete(this.currentRoomId);
       storage.removeJoinedRoom(this.currentRoomId);
       this.stopMessagePolling();
+      this.disconnectWebSocket();
 
       this.currentRoomId = null;
       this.currentRoomKey = null;
@@ -377,7 +457,7 @@ class ShadowLink {
    * Get room key from URL hash
    */
   getRoomKeyFromUrl() {
-    const hash = window.location.hash.substring(1);
+    const hash = globalThis.location.hash.substring(1);
     const params = new URLSearchParams(hash);
     return params.get('key');
   }
@@ -401,14 +481,15 @@ document.addEventListener('DOMContentLoaded', () => {
   window.shadowlink = app; // Make available globally for debugging
 
   // Handle URL hash for room joining
-  const hash = window.location.hash.substring(1);
+  const hash = globalThis.location.hash.substring(1);
   const params = new URLSearchParams(hash);
   const roomId = params.get('room');
+  const roomKey = params.get('key');
 
-  if (roomId) {
+  if (roomId && roomKey) {
     // Auto-join room from URL
     app.init().then(() => {
-      app.joinRoom(roomId);
+      app.joinRoom(roomId, roomKey);
     });
   } else {
     app.init();

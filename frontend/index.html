@@ -14,9 +14,7 @@
     <!-- Favicon -->
     <link rel="icon" href="/favicon.ico" type="image/x-icon">
 
-    <!-- Preload critical resources -->
-    <link rel="preload" href="/js/libsodium.js" as="script">
-    <link rel="preload" href="/js/app.js" as="script">
+    <!-- Resources loaded dynamically -->
 </head>
 <body>
     <!-- Loading Screen -->
@@ -108,14 +106,21 @@
                     <button class="modal-close">&times;</button>
                 </div>
                 <div class="modal-body">
-                    <p>Share this room link with others:</p>
-                    <div class="share-link-container">
-                        <input type="text" id="share-link" readonly>
-                        <button id="copy-link-btn" class="btn btn-secondary">Copy</button>
+                    <p>Share this room with others:</p>
+                    <div class="share-details">
+                        <div class="share-field">
+                            <label>Room ID:</label>
+                            <input type="text" id="share-room-id" readonly>
+                        </div>
+                        <div class="share-field">
+                            <label>Room Key:</label>
+                            <input type="text" id="share-room-key" readonly>
+                        </div>
                     </div>
-                    <div class="qr-code-container">
-                        <p>Or scan this QR code:</p>
-                        <div id="qr-code"></div>
+                    <div class="share-link-container">
+                        <p>Or share this complete link:</p>
+                        <input type="text" id="share-link" readonly>
+                        <button id="copy-link-btn" class="btn btn-secondary">Copy Link</button>
                     </div>
                 </div>
             </div>
@@ -129,12 +134,18 @@
                     <button class="modal-close">&times;</button>
                 </div>
                 <div class="modal-body">
-                    <p>Enter the room ID to join:</p>
+                    <p>Enter the room details to join:</p>
                     <form id="join-form">
                         <input
                             type="text"
                             id="join-room-id"
                             placeholder="Room ID (e.g., abc123-def456)"
+                            required
+                        >
+                        <input
+                            type="text"
+                            id="join-room-key"
+                            placeholder="Room Key (e.g., A1B2C3...)"
                             required
                         >
                         <button type="submit" class="btn btn-primary">Join Room</button>
@@ -150,18 +161,8 @@
     </div>
 
     <!-- JavaScript Files -->
-    <script src="/js/vendor/libsodium.js"></script>
     <script type="module" src="/js/app.js"></script>
-    <script type="module" src="/js/crypto.js"></script>
-    <script type="module" src="/js/api.js"></script>
-    <script type="module" src="/js/ui.js"></script>
-    <script type="module" src="/js/storage.js"></script>
 
     <!-- Service Worker (optional) -->
-    <!-- <script>
-        if ('serviceWorker' in navigator) {
-            navigator.serviceWorker.register('/service-worker.js');
-        }
-    </script> -->
 </body>
 </html>

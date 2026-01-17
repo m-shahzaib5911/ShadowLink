@@ -25,14 +25,14 @@ function validateEncryption(req, res, next) {
     });
   }
 
-  // Validate sizes (XChaCha20-Poly1305 specifics)
+  // Validate sizes (AES-GCM specifics)
   const encryptedBuffer = Buffer.from(encryptedMessage, 'base64');
   const ivBuffer = Buffer.from(iv, 'base64');
 
-  if (ivBuffer.length !== 24) {
+  if (ivBuffer.length !== 12) {
     return res.status(400).json({
       success: false,
-      error: 'Invalid IV size (must be 24 bytes for XChaCha20)'
+      error: 'Invalid IV size (must be 12 bytes for AES-GCM)'
     });
   }
 

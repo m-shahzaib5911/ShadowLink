@@ -6,6 +6,7 @@ const Message = require('../models/Message');
 const { verifyRoomAccess } = require('../middleware/auth');
 const { validateEncryption } = require('../middleware/encryption');
 const logger = require('../utils/logger');
+const { broadcastToRoom } = require('../server');
 
 /**
  * POST /api/messages/:roomId/send
@@ -25,6 +26,13 @@ router.post('/:roomId/send', verifyRoomAccess, validateEncryption, (req, res) =>
     room.addMessage(message);
 
     logger.info('Message sent', { roomId: room.id, messageId: message.id });
+
+    // Broadcast message to all WebSocket clients in the room
+    const messageData = {
+      type: 'new_message',
+      message: message.toJSON()
+    };
+    broadcastToRoom(room.id, messageData);
 
     res.status(201).json({
       success: true,

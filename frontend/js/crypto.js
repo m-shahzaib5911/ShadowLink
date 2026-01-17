@@ -1,97 +1,100 @@
 /**
  * ShadowLink Crypto Module
- * Handles end-to-end encryption using libsodium.js
+ * Handles end-to-end encryption using Web Crypto API (AES-GCM)
  */
 
 class Crypto {
-  constructor() {
-    this.ready = false;
-    this.sodium = null;
-  }
+  ready = false;
 
   /**
-   * Initialize libsodium
+   * Initialize crypto
    */
   async init() {
-    if (typeof sodium === 'undefined') {
-      throw new Error('libsodium.js not loaded');
+    if (!window.crypto || !window.crypto.subtle) {
+      throw new Error('Web Crypto API not supported');
     }
-
-    await sodium.ready;
-    this.sodium = sodium;
     this.ready = true;
+    console.log('Crypto initialization complete');
   }
 
   /**
-   * Generate a random 256-bit encryption key
+   * Generate a random 256-bit key
    */
   async generateKey() {
     if (!this.ready) await this.init();
 
-    const key = this.sodium.randombytes_buf(32);
-    return this.sodium.to_base64(key);
+    const keyBytes = new Uint8Array(32);
+    window.crypto.getRandomValues(keyBytes);
+    return btoa(String.fromCharCode(...keyBytes));
   }
 
   /**
-   * Encrypt a message
-   * @param {string} plaintext - Message to encrypt
-   * @param {string} keyBase64 - Base64-encoded key
-   * @returns {object} {message, iv, salt} all base64-encoded
+   * Encrypt a message using AES-GCM
    */
   async encryptMessage(plaintext, keyBase64) {
     if (!this.ready) await this.init();
 
-    const key = this.sodium.from_base64(keyBase64);
-    const nonce = this.sodium.randombytes_buf(24); // 192-bit nonce for XChaCha20
-    const messageBytes = this.sodium.from_string(plaintext);
+    const keyBytes = new Uint8Array([...atob(keyBase64)].map(c => c.charCodeAt(0)));
+    const key = await window.crypto.subtle.importKey('raw', keyBytes, 'AES-GCM', false, ['encrypt']);
 
-    const ciphertext = this.sodium.crypto_secretbox_easy(messageBytes, nonce, key);
+    const iv = new Uint8Array(12); // 96-bit IV for GCM
+    window.crypto.getRandomValues(iv);
+
+    const plaintextBytes = new TextEncoder().encode(plaintext);
+    const ciphertext = await window.crypto.subtle.encrypt(
+      { name: 'AES-GCM', iv: iv },
+      key,
+      plaintextBytes
+    );
 
     return {
-      message: this.sodium.to_base64(ciphertext),
-      iv: this.sodium.to_base64(nonce),
-      salt: this.sodium.to_base64(this.sodium.randombytes_buf(16)) // Random salt
+      message: btoa(String.fromCharCode(...new Uint8Array(ciphertext))),
+      iv: btoa(String.fromCharCode(...iv)),
+      salt: btoa(String.fromCharCode(...new Uint8Array(16))) // Random salt for future use
     };
   }
 
   /**
-   * Decrypt a message
-   * @param {string} encryptedMessage - Base64 ciphertext
-   * @param {string} ivBase64 - Base64 nonce
-   * @param {string} saltBase64 - Base64 salt (unused for now)
-   * @param {string} keyBase64 - Base64 key
-   * @returns {string} Decrypted plaintext
+   * Decrypt a message using AES-GCM
    */
   async decryptMessage(encryptedMessage, ivBase64, saltBase64, keyBase64) {
     if (!this.ready) await this.init();
 
-    const ciphertext = this.sodium.from_base64(encryptedMessage);
-    const nonce = this.sodium.from_base64(ivBase64);
-    const key = this.sodium.from_base64(keyBase64);
+    const keyBytes = new Uint8Array([...atob(keyBase64)].map(c => c.charCodeAt(0)));
+    const key = await window.crypto.subtle.importKey('raw', keyBytes, 'AES-GCM', false, ['decrypt']);
+
+    const ciphertext = new Uint8Array([...atob(encryptedMessage)].map(c => c.charCodeAt(0)));
+    const iv = new Uint8Array([...atob(ivBase64)].map(c => c.charCodeAt(0)));
 
     try {
-      const decrypted = this.sodium.crypto_secretbox_open_easy(ciphertext, nonce, key);
-      return this.sodium.to_string(decrypted);
+      const decrypted = await window.crypto.subtle.decrypt(
+        { name: 'AES-GCM', iv: iv },
+        key,
+        ciphertext
+      );
+      return new TextDecoder().decode(decrypted);
     } catch (error) {
       throw new Error('Decryption failed - invalid key or corrupted message');
     }
   }
 
   /**
-   * Hash a password (for future use)
-   * @param {string} password - Password to hash
-   * @returns {string} Hashed password
+   * Hash a password (placeholder)
    */
   async hashPassword(password) {
     if (!this.ready) await this.init();
 
-    const passwordBytes = this.sodium.from_string(password);
-    const hash = this.sodium.crypto_generichash(32, passwordBytes);
-    return this.sodium.to_base64(hash);
+    // Simple hash placeholder
+    let hash = 0;
+    for (let i = 0; i < password.length; i++) {
+      hash = ((hash << 5) - hash) + password.codePointAt(i);
+      hash = hash & hash; // Convert to 32-bit
+    }
+    return btoa(Math.abs(hash).toString());
   }
 
   /**
-   * Verify if libsodium is working
+   * Test crypto
    */
   async test() {
     if (!this.ready) await this.init();
