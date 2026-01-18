@@ -6,13 +6,15 @@ ShadowLink is a secure messaging application that prioritizes user privacy throu
 
 ## ✨ Features
 
-- 🔐 **End-to-End Encryption** - Messages encrypted with XChaCha20-Poly1305
+- 🔐 **End-to-End Encryption** - Messages encrypted with AES-GCM
 - 👤 **Anonymous** - No user accounts or personal data collection
 - ⏰ **Ephemeral** - Messages auto-delete after 1 hour
 - 🌐 **Decentralized** - Can operate on multiple relay nodes
 - 📱 **Responsive** - Works on desktop and mobile
 - 🚀 **Fast** - Minimal JavaScript, no frameworks
 - ⚡ **Real-time** - WebSocket-powered instant messaging
+- 🛠️ **Reliable Messaging** - Fixed message sending issues for better reliability
+- 🎨 **Enhanced UI** - Improved join room interface and user experience
 
 ## 📊 **Project Status**
 
@@ -20,7 +22,7 @@ ShadowLink is a secure messaging application that prioritizes user privacy throu
 - **Repository:** https://github.com/m-shahzaib5911/ShadowLink
 - **Backend:** Running on Node.js/Express
 - **Frontend:** Vanilla JS with E2EE encryption
-- **Security:** XChaCha20-Poly1305 implementation
+- **Security:** AES-GCM implementation
 - **Deployment:** Docker ready, production configured
 
 ##  Quick Start
@@ -81,10 +83,10 @@ docker run -p 3000:3000 shadowlink
 
 ### Frontend (Vanilla JavaScript)
 - No frameworks, minimal bundle size (~20KB)
-- libsodium.js for XChaCha20-Poly1305 encryption
+- Web Crypto API for AES-GCM encryption
 - Local/session storage for user data and keys
 - Responsive green/black theme design
-- Real-time message polling
+- Real-time WebSocket messaging
 - Progressive Web App ready
 
 ### Security Layers
@@ -116,7 +118,7 @@ docker run -p 3000:3000 shadowlink
 
 ShadowLink implements multiple security layers:
 
-- **Cryptography**: XChaCha20-Poly1305 AEAD encryption
+- **Cryptography**: AES-GCM AEAD encryption
 - **Key Management**: Client-side key generation and storage
 - **Transport**: HTTPS with TLS 1.3
 - **Storage**: Ephemeral in-memory storage
@@ -232,10 +234,10 @@ This is a proof-of-concept implementation. For production use:
 
 ## 🔗 Links
 
-- [XChaCha20-Poly1305 Specification](https://tools.ietf.org/html/rfc8439)
-- [libsodium Documentation](https://doc.libsodium.org/)
-- [Express.js](https://expressjs.com/)
+- [AES-GCM Specification](https://tools.ietf.org/html/rfc5288)
 - [Web Cryptography API](https://www.w3.org/TR/WebCryptoAPI/)
+- [Express.js](https://expressjs.com/)
+- [WebSocket API](https://developer.mozilla.org/en-US/docs/Web/API/WebSockets_API)
 
 ---
 
