@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 # 🔒 ShadowLink
 
 **End-to-End Encrypted, Ephemeral Messaging Platform**
@@ -19,3 +20,6 @@ ShadowLink is a secure messaging application that prioritizes user privacy throu
 ---
 
 **Built with privacy and security in mind** 🔒✨
+=======
+# ShadowLink
+>>>>>>> 689e29fe7f238b4caeee3af5d041dde0fe6df0d9
