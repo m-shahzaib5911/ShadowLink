@@ -8,13 +8,6 @@ class API {
     this.baseURL = baseURL;
   }
 
-  /**
-   * Make an HTTP request
-   * @param {string} method - HTTP method
-   * @param {string} endpoint - API endpoint
-   * @param {object} data - Request data
-   * @returns {Promise<object>} Response data
-   */
   async request(method, endpoint, data = null) {
     const url = this.baseURL + endpoint;
     const config = {
@@ -29,8 +22,11 @@ class API {
     }
 
     try {
+      console.log(`[API] ${method.toUpperCase()} ${url}`, data);
       const response = await fetch(url, config);
       const result = await response.json();
+
+      console.log(`[API] Response Status: ${response.status}`, result);
 
       if (!response.ok) {
         throw new Error(result.error || `HTTP ${response.status}`);
@@ -38,47 +34,41 @@ class API {
 
       return result;
     } catch (error) {
-      console.error(`API ${method} ${endpoint} failed:`, error);
+      console.error(`[API] ${method} ${endpoint} failed:`, error);
       throw error;
     }
   }
 
-  /**
-   * GET request
-   */
   async get(endpoint) {
     return this.request('GET', endpoint);
   }
 
-  /**
-   * POST request
-   */
   async post(endpoint, data) {
     return this.request('POST', endpoint, data);
   }
 
-  /**
-   * PUT request
-   */
   async put(endpoint, data) {
     return this.request('PUT', endpoint, data);
   }
 
-  /**
-   * DELETE request
-   */
   async delete(endpoint) {
     return this.request('DELETE', endpoint);
   }
 
-  // Room endpoints
-  async createRoom() {
-    return this.post('/api/rooms/create');
-  }
+ // api.js (MODIFIED PARTS ONLY)
 
-  async joinRoom(roomId, userId, publicKey) {
-    return this.post(`/api/rooms/${roomId}/join`, { userId, publicKey });
-  }
+async createRoom(roomName, password, displayName, userId, key) {
+  return this.post('/api/rooms/create', { roomName, password, displayName, userId, key });
+}
+
+async joinRoom(roomId, displayName, password, userId) {
+  return this.post(`/api/rooms/${roomId}/join`, {
+    userId,
+    displayName,
+    password
+  });
+}
+
 
   async getRoomInfo(roomId) {
     return this.get(`/api/rooms/${roomId}`);
@@ -98,8 +88,8 @@ class API {
     });
   }
 
-  async getMessages(roomId, since = null) {
-    const params = since ? `?since=${encodeURIComponent(since)}` : '';
+  async getMessages(roomId, userId, since = null) {
+    const params = `?userId=${encodeURIComponent(userId)}${since ? `&since=${encodeURIComponent(since)}` : ''}`;
     return this.get(`/api/messages/${roomId}${params}`);
   }
 
@@ -126,6 +116,5 @@ class API {
   }
 }
 
-// Export singleton instance
 const api = new API();
 export default api;

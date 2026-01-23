@@ -15,19 +15,47 @@ const logger = require('../utils/logger');
  */
 router.post('/create', async (req, res) => {
   try {
+    const { roomName, password, displayName, userId, key } = req.body;
+
+    if (!roomName || !password || !key) {
+      return res.status(400).json({ success: false, error: 'Room name, password, and key required' });
+    }
+
+    // Check if a room with the same name already exists
+    let duplicateRoom = null;
+    for (const room of rooms.values()) {
+      if (room.roomName.toLowerCase() === roomName.toLowerCase()) {
+        duplicateRoom = room;
+        break;
+      }
+    }
+
+    if (duplicateRoom) {
+      return res.status(409).json({ 
+        success: false, 
+        error: `Room "${roomName}" already exists. Please choose a different name.` 
+      });
+    }
+
     const roomId = uuidv4();
-    const key = await generateKey();
-    const room = new Room(roomId, key);
+    const room = new Room(roomId, key, roomName, password);
+
+    // Add creator as first user with the actual userId
+    const User = require('../models/User');
+    const creator = new User(userId, roomId, null, displayName);
+    room.addUser(creator);
 
     rooms.set(roomId, room);
 
-    logger.info('Room created', { roomId });
+    logger.info('Room created', { roomId, roomName });
 
     res.status(201).json({
       success: true,
       room: {
         id: room.id,
+        name: room.roomName,
         key: room.key,
+        userCount: room.getUserCount(),
         created: room.created.toISOString(),
         expiresAt: room.expiresAt.toISOString()
       }
@@ -44,24 +72,32 @@ router.post('/create', async (req, res) => {
  */
 router.post('/:roomId/join', verifyRoomAccess, async (req, res) => {
   try {
-    const { userId, publicKey } = req.body;
+    const { userId, password, displayName } = req.body;
 
-    if (!userId) {
-      return res.status(400).json({ success: false, error: 'User ID required' });
+    if (!userId || !password || !displayName) {
+      return res.status(400).json({ success: false, error: 'User ID, password, and display name required' });
     }
 
     const room = req.room;
-    const user = new User(userId, room.id, publicKey);
+
+    // Verify password
+    if (room.password !== password) {
+      return res.status(403).json({ success: false, error: 'Incorrect password' });
+    }
+
+    const user = new User(userId, room.id, null, displayName);
 
     room.addUser(user);
 
-    logger.info('User joined room', { roomId: room.id, userId });
+    logger.info('User joined room', { roomId: room.id, userId, displayName });
 
     res.json({
       success: true,
       message: 'Joined room successfully',
       roomInfo: {
         id: room.id,
+        name: room.roomName,
+        key: room.key,
         userCount: room.getUserCount(),
         created: room.created.toISOString(),
         expiresAt: room.expiresAt.toISOString()
@@ -84,6 +120,7 @@ router.get('/:roomId', verifyRoomAccess, (req, res) => {
     success: true,
     room: {
       id: room.id,
+      name: room.roomName,
       userCount: room.getUserCount(),
       messageCount: room.getMessageCount(),
       created: room.created.toISOString(),

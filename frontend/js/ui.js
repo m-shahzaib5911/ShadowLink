@@ -61,9 +61,13 @@ class UI {
       link.href = '#';
       link.className = `room-item ${roomId === currentRoomId ? 'active' : ''}`;
       link.dataset.roomId = roomId;
+      
+      const roomName = room.name || `Room ${roomId.substring(0, 8)}`;
+      const userCount = room.userCount || 0;
+      
       link.innerHTML = `
-        <div class="room-name">${roomId.substring(0, 8)}...</div>
-        <div class="room-meta">${room.userCount || 0} users</div>
+        <div class="room-name">${this.escapeHtml(roomName)}</div>
+        <div class="room-meta">${userCount} ${userCount === 1 ? 'user' : 'users'}</div>
       `;
 
       link.addEventListener('click', (e) => {
@@ -96,7 +100,7 @@ class UI {
 
     messageDiv.innerHTML = `
       <div class="message-content">
-        ${!isOwn ? `<div class="message-author">${message.userId.substring(0, 8)}...</div>` : ''}
+        ${!isOwn ? `<div class="message-author">${message.displayName || 'Unknown'}</div>` : ''}
         <div class="message-bubble">
           <div class="message-text">${this.escapeHtml(message.plaintext || message.encryptedMessage)}</div>
           <div class="message-time">${timeString}</div>
@@ -121,8 +125,10 @@ class UI {
    * @param {object} roomInfo - Room information
    */
   updateRoomInfo(roomInfo) {
-    document.getElementById('room-title').textContent = `Room ${roomInfo.id.substring(0, 8)}...`;
-    document.getElementById('room-users').textContent = `${roomInfo.userCount} users`;
+    const roomName = roomInfo.name || `Room ${roomInfo.id.substring(0, 8)}`;
+    const userCount = roomInfo.userCount || 0;
+    document.getElementById('room-title').textContent = this.escapeHtml(roomName);
+    document.getElementById('room-users').textContent = `${userCount} ${userCount === 1 ? 'user' : 'users'}`;
   }
 
   /**

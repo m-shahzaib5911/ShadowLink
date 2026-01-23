@@ -1,4 +1,4 @@
-const sodium = require('libsodium-wrappers');
+const crypto = require('crypto');
 
 /**
  * Cryptographic utilities for ShadowLink backend
@@ -9,10 +9,8 @@ const sodium = require('libsodium-wrappers');
  * Generate a random 256-bit encryption key
  * @returns {string} Base64-encoded key
  */
-async function generateKey() {
-  await sodium.ready;
-  const key = sodium.randombytes_buf(32); // 256 bits
-  return sodium.to_base64(key);
+function generateKey() {
+  return crypto.randomBytes(32).toString('base64');
 }
 
 /**

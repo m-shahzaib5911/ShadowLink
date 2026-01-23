@@ -143,12 +143,12 @@ class Storage {
   }
 
   /**
-   * Save room key
+   * Save room key (persisted in localStorage)
    * @param {string} roomId - Room ID
    * @param {string} key - Room encryption key
    */
   saveRoomKey(roomId, key) {
-    this.setSessionItem(`room_${roomId}_key`, key);
+    this.setItem(`room_${roomId}_key`, key);
   }
 
   /**
@@ -157,7 +157,7 @@ class Storage {
    * @returns {string|null} Room key
    */
   getRoomKey(roomId) {
-    return this.getSessionItem(`room_${roomId}_key`);
+    return this.getItem(`room_${roomId}_key`);
   }
 
   /**
@@ -216,8 +216,37 @@ class Storage {
     const rooms = this.getJoinedRooms();
     const filtered = rooms.filter(id => id !== roomId);
     this.saveJoinedRooms(filtered);
-    // Also remove room key
-    this.removeSessionItem(`room_${roomId}_key`);
+    // Also remove room key and metadata
+    this.removeItem(`room_${roomId}_key`);
+    this.removeItem(`room_${roomId}_metadata`);
+  }
+
+  /**
+   * Save room metadata
+   * @param {string} roomId - Room ID
+   * @param {object} metadata - Room metadata (name, password, displayName, etc)
+   */
+  saveRoomMetadata(roomId, metadata) {
+    this.setItem(`room_${roomId}_metadata`, metadata);
+  }
+
+  /**
+   * Get room metadata
+   * @param {string} roomId - Room ID
+   * @returns {object|null} Room metadata
+   */
+  getRoomMetadata(roomId) {
+    return this.getItem(`room_${roomId}_metadata`);
+  }
+
+  /**
+   * Clear all joined rooms and their data
+   */
+  clearAllRooms() {
+    const rooms = this.getJoinedRooms();
+    rooms.forEach(roomId => {
+      this.removeJoinedRoom(roomId);
+    });
   }
 }
 

@@ -7,6 +7,7 @@ require('dotenv').config();
 // Import custom middleware
 const corsMiddleware = require('./middleware/cors');
 const { errorHandler, notFoundHandler } = require('./middleware/errorHandler');
+const { addRoomConnection, removeRoomConnection, getRoomConnections } = require('./utils/broadcast');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -32,24 +33,6 @@ app.use(corsMiddleware);
 
 app.use(express.json({ limit: '1mb' }));
 app.use(express.urlencoded({ extended: true }));
-
-// Store WebSocket connections by room
-const roomConnections = new Map(); // roomId -> Set of WebSocket connections
-
-// Function to broadcast messages to room via WebSocket
-function broadcastToRoom(roomId, message) {
-  const roomClients = roomConnections.get(roomId);
-  if (roomClients) {
-    roomClients.forEach(client => {
-      if (client.readyState === WebSocket.OPEN) {
-        client.send(JSON.stringify(message));
-      }
-    });
-  }
-}
-
-// Export for use in routes
-module.exports.broadcastToRoom = broadcastToRoom;
 
 // Health check endpoint
 app.get('/health', (req, res) => {
@@ -111,10 +94,7 @@ wss.on('connection', (ws, req) => {
   }
 
   // Add connection to room
-  if (!roomConnections.has(roomId)) {
-    roomConnections.set(roomId, new Set());
-  }
-  roomConnections.get(roomId).add(ws);
+  addRoomConnection(roomId, ws);
 
   console.log(`User ${userId} joined WebSocket room ${roomId}`);
 
@@ -124,6 +104,7 @@ wss.on('connection', (ws, req) => {
       const message = JSON.parse(data.toString());
 
       // Broadcast message to all clients in the same room (except sender)
+      const roomConnections = getRoomConnections();
       const roomClients = roomConnections.get(roomId);
       if (roomClients) {
         roomClients.forEach(client => {
@@ -142,14 +123,7 @@ wss.on('connection', (ws, req) => {
     console.log(`User ${userId} left WebSocket room ${roomId}`);
 
     // Remove connection from room
-    const roomClients = roomConnections.get(roomId);
-    if (roomClients) {
-      roomClients.delete(ws);
-      // Clean up empty rooms
-      if (roomClients.size === 0) {
-        roomConnections.delete(roomId);
-      }
-    }
+    removeRoomConnection(roomId, ws);
   });
 
   // Handle errors

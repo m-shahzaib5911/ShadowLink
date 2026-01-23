@@ -13,8 +13,6 @@
 
     <!-- Favicon -->
     <link rel="icon" href="/favicon.ico" type="image/x-icon">
-
-    <!-- Resources loaded dynamically -->
 </head>
 <body>
     <!-- Loading Screen -->
@@ -26,7 +24,6 @@
 
     <!-- Main Application -->
     <div id="app" class="app hidden">
-        <!-- Main App Interface -->
         <div id="main-app" class="main-app">
             <!-- Header -->
             <header class="app-header">
@@ -43,12 +40,14 @@
                 <!-- Sidebar -->
                 <aside id="sidebar" class="sidebar">
                     <div class="sidebar-header">
-                        <button id="create-room-btn" class="btn btn-primary">Create New Room</button>
+                        <div class="sidebar-buttons">
+                            <button id="create-room-btn" class="btn btn-primary">Create New Room</button>
+                            <button id="join-room-btn" class="btn btn-secondary">Join Room</button>
+                        </div>
                     </div>
                     <div class="rooms-list">
                         <h3>Active Rooms</h3>
                         <ul id="rooms-list" class="rooms-list-items">
-                            <!-- Rooms will be populated here -->
                         </ul>
                     </div>
                 </aside>
@@ -77,7 +76,6 @@
                         </div>
 
                         <div id="messages-container" class="messages-container">
-                            <!-- Messages will be populated here -->
                         </div>
 
                         <div class="message-input-area">
@@ -98,30 +96,29 @@
         </div>
 
         <!-- Modals -->
-        <!-- Share Room Modal -->
-        <div id="share-modal" class="modal hidden">
+        <!-- Create Room Modal -->
+        <div id="create-modal" class="modal hidden">
             <div class="modal-content">
                 <div class="modal-header">
-                    <h3>Share Room</h3>
+                    <h3>Create New Room</h3>
                     <button class="modal-close">&times;</button>
                 </div>
                 <div class="modal-body">
-                    <p>Share this room with others:</p>
-                    <div class="share-details">
-                        <div class="share-field">
-                            <label>Room ID:</label>
-                            <input type="text" id="share-room-id" readonly>
+                    <form id="create-room-form">
+                        <div class="form-group">
+                            <label>Room Name</label>
+                            <input type="text" id="room-name" placeholder="e.g., Team Chat" required>
                         </div>
-                        <div class="share-field">
-                            <label>Room Key:</label>
-                            <input type="text" id="share-room-key" readonly>
+                        <div class="form-group">
+                            <label>Your Display Name</label>
+                            <input type="text" id="display-name" placeholder="e.g., Alice" required>
                         </div>
-                    </div>
-                    <div class="share-link-container">
-                        <p>Or share this complete link:</p>
-                        <input type="text" id="share-link" readonly>
-                        <button id="copy-link-btn" class="btn btn-secondary">Copy Link</button>
-                    </div>
+                        <div class="form-group">
+                            <label>Room Password (for joining)</label>
+                            <input type="password" id="room-password" placeholder="Set a password" required>
+                        </div>
+                        <button type="submit" class="btn btn-primary">Create Room</button>
+                    </form>
                 </div>
             </div>
         </div>
@@ -134,35 +131,52 @@
                     <button class="modal-close">&times;</button>
                 </div>
                 <div class="modal-body">
-                    <p>Enter the room details to join:</p>
+                    <p>Enter the details to join:</p>
                     <form id="join-form">
-                        <input
-                            type="text"
-                            id="join-room-id"
-                            placeholder="Room ID (e.g., abc123-def456)"
-                            required
-                        >
-                        <input
-                            type="text"
-                            id="join-room-key"
-                            placeholder="Room Key (e.g., A1B2C3...)"
-                            required
-                        >
+                        <div class="form-group">
+                            <label>Shareable Link</label>
+                            <input type="text" id="join-room-id" placeholder="Paste the link here" required>
+                        </div>
+                        <div class="form-group">
+                            <label>Your Display Name</label>
+                            <input type="text" id="join-display-name" placeholder="e.g., Bob" required>
+                        </div>
+                        <div class="form-group">
+                            <label>Room Password</label>
+                            <input type="password" id="join-password" placeholder="Enter password" required>
+                        </div>
                         <button type="submit" class="btn btn-primary">Join Room</button>
                     </form>
                 </div>
             </div>
         </div>
 
-        <!-- Notifications -->
-        <div id="notifications" class="notifications">
-            <!-- Notifications will appear here -->
+        <!-- Share Room Modal -->
+        <div id="share-modal" class="modal hidden">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h3>Share Room</h3>
+                    <button class="modal-close">&times;</button>
+                </div>
+                <div class="modal-body">
+                    <p>Share this link with others to join:</p>
+                    <div class="share-link-container">
+                        <input type="text" id="share-link" readonly>
+                        <button id="copy-link-btn" class="btn btn-secondary">Copy Link</button>
+                    </div>
+                    <div class="share-info">
+                       <p><strong>Room Password:</strong></p>
+                       <p id="share-password" class="share-password-display"></p>
+                    </div>
+                    <p class="note">Share the link and password with others. They will need both to join.</p>
+                </div>
+            </div>
         </div>
+
+        <!-- Notifications -->
+        <div id="notifications" class="notifications"></div>
     </div>
 
-    <!-- JavaScript Files -->
     <script type="module" src="/js/app.js"></script>
-
-    <!-- Service Worker (optional) -->
 </body>
 </html>

@@ -12,8 +12,12 @@ class ShadowLink {
   userId = null;
   currentRoomId = null;
   currentRoomKey = null;
+  currentRoomPassword = null;
+  currentRoomName = null;
+  currentDisplayName = null;
   rooms = new Map();
   messageUpdateInterval = null;
+  roomInfoUpdateInterval = null;
   websocket = null;
   isInitialized = false;
 
@@ -35,14 +39,8 @@ class ShadowLink {
         storage.saveUserId(this.userId);
       }
 
-      // Load joined rooms (disabled for fresh start on refresh)
-      // const joinedRooms = storage.getJoinedRooms();
-      // for (const roomId of joinedRooms) {
-      //   const key = storage.getRoomKey(roomId);
-      //   if (key) {
-      //     this.rooms.set(roomId, { id: roomId, key });
-      //   }
-      // }
+      // Clear all stored rooms on refresh - no persistence
+      storage.clearAllRooms();
 
       // Set up event listeners
       this.setupEventListeners();
@@ -52,15 +50,21 @@ class ShadowLink {
       ui.updateConnectionStatus(true);
 
       this.isInitialized = true;
-      ui.hideLoading();
 
-      if (this.rooms.size === 0) {
-        ui.showWelcome();
-      } else {
-        ui.showChat();
-      }
+      // Add extra delay for loading screen on refresh
+      setTimeout(async () => {
+        ui.hideLoading();
 
-      ui.showNotification('ShadowLink ready!', 'info');
+        if (this.rooms.size === 0) {
+          ui.showWelcome();
+        } else {
+          // Auto-select the first room
+          const firstRoomId = this.rooms.keys().next().value;
+          await this.selectRoom(firstRoomId);
+        }
+
+        ui.showNotification('ShadowLink ready!', 'info');
+      }, 1000);
     } catch (error) {
       console.error('Initialization failed:', error);
       ui.showNotification('Failed to initialize ShadowLink', 'error');
@@ -80,22 +84,53 @@ class ShadowLink {
    */
   setupEventListeners() {
     // Welcome screen buttons
-    document.getElementById('welcome-create-btn').addEventListener('click', () => this.createRoom());
+    document.getElementById('welcome-create-btn').addEventListener('click', () => this.showCreateRoomModal());
     document.getElementById('welcome-join-btn').addEventListener('click', () => ui.showModal('join-modal'));
 
-    // Create room button
-    document.getElementById('create-room-btn').addEventListener('click', () => this.createRoom());
+    // Sidebar buttons
+    document.getElementById('create-room-btn').addEventListener('click', () => this.showCreateRoomModal());
+    document.getElementById('join-room-btn').addEventListener('click', () => {
+      // Reset join form
+      document.getElementById('join-room-id').value = '';
+      document.getElementById('join-display-name').value = '';
+      document.getElementById('join-password').value = '';
+      ui.showModal('join-modal');
+    });
+
+    // Create room form
+    document.getElementById('create-room-form').addEventListener('submit', (e) => {
+      e.preventDefault();
+      const roomName = document.getElementById('room-name').value.trim();
+      const displayName = document.getElementById('display-name').value.trim();
+      const password = document.getElementById('room-password').value.trim();
+      
+      if (roomName && displayName && password) {
+        this.createRoom(roomName, displayName, password);
+        ui.hideModal('create-modal');
+      } else {
+        ui.showNotification('Please fill in all fields', 'error');
+      }
+    });
 
     // Join room modal
     document.getElementById('join-form').addEventListener('submit', (e) => {
       e.preventDefault();
-      const roomId = document.getElementById('join-room-id').value.trim();
-      const roomKey = document.getElementById('join-room-key').value.trim();
-      if (roomId && roomKey) {
-        this.joinRoom(roomId, roomKey);
+      const link = document.getElementById('join-room-id').value.trim();
+      const displayName = document.getElementById('join-display-name').value.trim();
+      const password = document.getElementById('join-password').value.trim();
+      
+      // Extract room ID from link format: roomId or full link
+      let roomId = link;
+      if (link.includes('#')) {
+        const match = link.match(/room=([a-f0-9\-]+)/);
+        roomId = match ? match[1] : link;
+      }
+      
+      if (roomId && displayName && password) {
+        this.joinRoom(roomId, displayName, password);
         ui.hideModal('join-modal');
       } else {
-        ui.showNotification('Please enter both Room ID and Key', 'error');
+        ui.showNotification('Please fill in all fields', 'error');
       }
     });
 
@@ -138,53 +173,113 @@ class ShadowLink {
   }
 
   /**
+   * Show create room modal
+   */
+  showCreateRoomModal() {
+    // Clear previous values
+    document.getElementById('room-name').value = '';
+    document.getElementById('display-name').value = '';
+    document.getElementById('room-password').value = '';
+    ui.showModal('create-modal');
+  }
+
+  /**
    * Create a new room
    */
-  async createRoom() {
+  async createRoom(roomName, displayName, password) {
     try {
+      ui.showLoading();
       ui.showNotification('Creating room...', 'info');
 
-      const response = await api.createRoom();
+      // Check if room name already exists in this browser
+      for (const room of this.rooms.values()) {
+        if (room.name.toLowerCase() === roomName.toLowerCase()) {
+          ui.hideLoading();
+          ui.showNotification(`Room "${roomName}" already exists in your sessions`, 'error');
+          return;
+        }
+      }
+
+      const key = await crypto.generateKey();
+      const response = await api.createRoom(roomName, password, displayName, this.userId, key);
       const { room } = response;
 
       // Store room info
-      this.rooms.set(room.id, { id: room.id, key: room.key });
+      this.rooms.set(room.id, {
+        id: room.id,
+        key: key,
+        name: room.name,
+        password: password,
+        displayName: displayName,
+        userCount: room.userCount
+      });
       storage.saveRoomKey(room.id, room.key);
+      storage.saveRoomMetadata(room.id, {
+        name: room.name,
+        password: password,
+        displayName: displayName,
+        createdAt: new Date().toISOString()
+      });
       storage.addJoinedRoom(room.id);
 
-      ui.showNotification('Room created!', 'success');
+      ui.hideLoading();
+      ui.showNotification('Room created! Click Share to invite others.', 'success');
       ui.updateRoomsList(this.rooms);
 
       // Auto-join the created room
       await this.selectRoom(room.id);
     } catch (error) {
       console.error('Create room failed:', error);
-      ui.showNotification('Failed to create room', 'error');
+      ui.hideLoading();
+      ui.showNotification(error.message || 'Failed to create room', 'error');
     }
   }
 
   /**
    * Join an existing room
    */
-  async joinRoom(roomId, roomKey) {
+  async joinRoom(roomId, displayName, password) {
     try {
+      ui.showLoading();
       ui.showNotification('Joining room...', 'info');
 
-      await api.joinRoom(roomId, this.userId);
+      // Check if already in this room
+      if (this.rooms.has(roomId)) {
+        ui.hideLoading();
+        ui.showNotification('You are already in this room', 'error');
+        return;
+      }
 
-      // Store the provided room key
-      storage.saveRoomKey(roomId, roomKey);
+      const response = await api.joinRoom(roomId, displayName, password, this.userId);
+      const { roomInfo } = response;
 
-      this.rooms.set(roomId, { id: roomId, key: roomKey });
+      // Store the room info
+      this.rooms.set(roomId, {
+        id: roomId,
+        key: roomInfo.key,
+        name: roomInfo.name,
+        password: password,
+        displayName: displayName,
+        userCount: roomInfo.userCount
+      });
+      storage.saveRoomKey(roomId, roomInfo.key);
+      storage.saveRoomMetadata(roomId, {
+        name: roomInfo.name,
+        password: password,
+        displayName: displayName,
+        joinedAt: new Date().toISOString()
+      });
       storage.addJoinedRoom(roomId);
 
+      ui.hideLoading();
       ui.showNotification('Joined room!', 'success');
       ui.updateRoomsList(this.rooms);
 
       await this.selectRoom(roomId);
     } catch (error) {
       console.error('Join room failed:', error);
-      ui.showNotification('Failed to join room', 'error');
+      ui.hideLoading();
+      ui.showNotification(error.message || 'Failed to join room', 'error');
     }
   }
 
@@ -200,8 +295,12 @@ class ShadowLink {
     // Disconnect from previous WebSocket if connected
     this.disconnectWebSocket();
 
+    const room = this.rooms.get(roomId);
     this.currentRoomId = roomId;
-    this.currentRoomKey = this.rooms.get(roomId).key;
+    this.currentRoomKey = room.key;
+    this.currentRoomPassword = room.password;
+    this.currentRoomName = room.name;
+    this.currentDisplayName = room.displayName;
 
     ui.updateRoomsList(this.rooms, roomId);
     ui.showChat();
@@ -209,7 +308,16 @@ class ShadowLink {
     // Load room info
     try {
       const response = await api.getRoomInfo(roomId);
-      ui.updateRoomInfo(response.room);
+      const roomInfo = response.room;
+      
+      // Update stored room data with latest user count
+      const storedRoom = this.rooms.get(roomId);
+      storedRoom.userCount = roomInfo.userCount;
+      this.rooms.set(roomId, storedRoom);
+      
+      // Update both header and sidebar with latest info
+      ui.updateRoomInfo(roomInfo);
+      ui.updateRoomsList(this.rooms, roomId);
     } catch (error) {
       console.error('Failed to load room info:', error);
     }
@@ -228,23 +336,34 @@ class ShadowLink {
     const input = document.getElementById('message-input');
     const message = input.value.trim();
 
-    if (!message || !this.currentRoomId || !this.currentRoomKey) {
+    if (!message) {
+      return;
+    }
+
+    if (!this.currentRoomId || !this.currentRoomKey) {
+      ui.showNotification('No room selected', 'error');
       return;
     }
 
     try {
+      console.log('Starting message encryption...', {roomId: this.currentRoomId, userId: this.userId});
+      
       // Encrypt message
       const encrypted = await crypto.encryptMessage(message, this.currentRoomKey);
+      console.log('Message encrypted successfully', {messageLength: encrypted.message.length, ivLength: encrypted.iv.length});
 
       // Send to server
-      await api.sendMessage(this.currentRoomId, this.userId, encrypted.message, encrypted.iv, encrypted.salt);
+      console.log('Sending message to server...', {endpoint: `/api/messages/${this.currentRoomId}/send`});
+      const response = await api.sendMessage(this.currentRoomId, this.userId, encrypted.message, encrypted.iv, encrypted.salt);
+      console.log('Message sent successfully', response);
 
       // Clear input
       input.value = '';
 
     } catch (error) {
       console.error('Send message failed:', error);
-      ui.showNotification('Failed to send message', 'error');
+      console.error('Error details:', {name: error.name, message: error.message, stack: error.stack});
+      ui.showNotification('Failed to send message: ' + error.message, 'error');
     }
   }
 
@@ -255,7 +374,7 @@ class ShadowLink {
     if (!this.currentRoomId) return;
 
     try {
-      const response = await api.getMessages(this.currentRoomId);
+      const response = await api.getMessages(this.currentRoomId, this.userId);
       ui.clearMessages();
 
       // Decrypt and display messages
@@ -265,6 +384,7 @@ class ShadowLink {
           const displayMessage = {
             id: msg.id,
             userId: msg.userId,
+            displayName: msg.displayName,
             plaintext,
             timestamp: msg.timestamp
           };
@@ -275,6 +395,7 @@ class ShadowLink {
           ui.displayMessage({
             id: msg.id,
             userId: msg.userId,
+            displayName: msg.displayName,
             plaintext: '[Encrypted message]',
             timestamp: msg.timestamp
           }, msg.userId === this.userId);
@@ -302,8 +423,10 @@ class ShadowLink {
     this.websocket.onopen = () => {
       console.log('WebSocket connected');
       ui.updateConnectionStatus(true);
-      // Stop polling since we have real-time updates
+      // Stop message polling since we have real-time updates
       this.stopMessagePolling();
+      // But keep room info polling for user count updates
+      this.startRoomInfoPolling();
     };
 
     this.websocket.onmessage = (event) => {
@@ -348,8 +471,7 @@ class ShadowLink {
 
           const displayMessage = {
             id: message.id,
-            userId: message.userId,
-            plaintext,
+            userId: message.userId,            displayName: message.displayName,            plaintext,
             timestamp: message.timestamp
           };
 
@@ -374,6 +496,9 @@ class ShadowLink {
       this.websocket.close();
       this.websocket = null;
     }
+    // Also stop polling intervals
+    this.stopMessagePolling();
+    this.stopRoomInfoPolling();
   }
 
   /**
@@ -384,7 +509,29 @@ class ShadowLink {
 
     this.messageUpdateInterval = setInterval(async () => {
       if (this.currentRoomId && document.visibilityState === 'visible') {
-        await this.loadMessages();
+        try {
+          // Load new messages
+          await this.loadMessages();
+          
+          // Also refresh room info (for user count updates)
+          const response = await api.getRoomInfo(this.currentRoomId);
+          const roomInfo = response.room;
+          
+          // Update stored room data with latest user count
+          if (this.rooms.has(this.currentRoomId)) {
+            const storedRoom = this.rooms.get(this.currentRoomId);
+            if (storedRoom.userCount !== roomInfo.userCount) {
+              storedRoom.userCount = roomInfo.userCount;
+              this.rooms.set(this.currentRoomId, storedRoom);
+              
+              // Update both header and sidebar with new count
+              ui.updateRoomInfo(roomInfo);
+              ui.updateRoomsList(this.rooms, this.currentRoomId);
+            }
+          }
+        } catch (error) {
+          console.error('Polling error:', error);
+        }
       }
     }, 2000); // Poll every 2 seconds
   }
@@ -400,20 +547,61 @@ class ShadowLink {
   }
 
   /**
+   * Start polling for room info (user count updates)
+   */
+  startRoomInfoPolling() {
+    this.stopRoomInfoPolling(); // Stop any existing polling
+
+    this.roomInfoUpdateInterval = setInterval(async () => {
+      if (this.currentRoomId && document.visibilityState === 'visible') {
+        try {
+          const response = await api.getRoomInfo(this.currentRoomId);
+          const roomInfo = response.room;
+          
+          // Update stored room data with latest user count
+          if (this.rooms.has(this.currentRoomId)) {
+            const storedRoom = this.rooms.get(this.currentRoomId);
+            if (storedRoom.userCount !== roomInfo.userCount) {
+              storedRoom.userCount = roomInfo.userCount;
+              this.rooms.set(this.currentRoomId, storedRoom);
+              
+              // Update both header and sidebar with new count
+              ui.updateRoomInfo(roomInfo);
+              ui.updateRoomsList(this.rooms, this.currentRoomId);
+            }
+          }
+        } catch (error) {
+          console.error('Room info polling error:', error);
+        }
+      }
+    }, 3000); // Poll every 3 seconds
+  }
+
+  /**
+   * Stop room info polling
+   */
+  stopRoomInfoPolling() {
+    if (this.roomInfoUpdateInterval) {
+      clearInterval(this.roomInfoUpdateInterval);
+      this.roomInfoUpdateInterval = null;
+    }
+  }
+
+  /**
    * Share current room
    */
   shareRoom() {
-    if (!this.currentRoomId || !this.currentRoomKey) {
+    if (!this.currentRoomId) {
       ui.showNotification('No room to share', 'error');
       return;
     }
 
-    // Populate share fields
-    document.getElementById('share-room-id').value = this.currentRoomId;
-    document.getElementById('share-room-key').value = this.currentRoomKey;
-
-    const shareUrl = `${globalThis.location.origin}${globalThis.location.pathname}#room=${this.currentRoomId}&key=${this.currentRoomKey}`;
+    // Generate shareable link with room ID only
+    const shareUrl = `${globalThis.location.origin}${globalThis.location.pathname}#room=${this.currentRoomId}`;
     document.getElementById('share-link').value = shareUrl;
+    
+    // Display the password
+    document.getElementById('share-password').textContent = this.currentRoomPassword || 'Not set';
 
     ui.showModal('share-modal');
   }
@@ -484,12 +672,13 @@ document.addEventListener('DOMContentLoaded', () => {
   const hash = globalThis.location.hash.substring(1);
   const params = new URLSearchParams(hash);
   const roomId = params.get('room');
-  const roomKey = params.get('key');
 
-  if (roomId && roomKey) {
-    // Auto-join room from URL
+  if (roomId) {
+    // Room ID in URL - user will need to fill in display name and password
     app.init().then(() => {
-      app.joinRoom(roomId, roomKey);
+      // Pre-fill the join form with the room ID
+      document.getElementById('join-room-id').value = roomId;
+      ui.showModal('join-modal');
     });
   } else {
     app.init();

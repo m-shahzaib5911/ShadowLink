@@ -31,7 +31,7 @@ function verifyRoomAccess(req, res, next) {
  * Checks if user is in the room
  */
 function verifyUserAccess(req, res, next) {
-  const { userId } = req.body;
+  const userId = req.body.userId || req.query.userId;
   const room = req.room;
 
   if (!userId) {
