@@ -1,0 +1,12 @@
+{
+  "name": "shadowlink",
+  "version": "1.0.0",
+  "description": "End-to-End Encrypted, Ephemeral Messaging Platform",
+  "scripts": {
+    "start": "echo Starting ShadowLink... && echo Backend will run on port 3000 && echo Frontend will run on port 3000",
+    "dev": "echo Run backend: cd backend && node server.js && echo Run frontend: cd frontend && npm start",
+    "restart": "echo Stopping all servers... && powershell -Command \"Get-Process -Name node -ErrorAction SilentlyContinue | Stop-Process -Force\" && echo Starting backend... && start cmd /c \"cd backend && node server.js\" && echo Starting frontend... && start cmd /c \"cd frontend && npm start\""
+  },
+  "author": "",
+  "license": "MIT"
+}

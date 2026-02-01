@@ -3,7 +3,7 @@
  * Ensures encrypted messages have proper format
  */
 function validateEncryption(req, res, next) {
-  const { encryptedMessage, iv, salt } = req.body;
+  const { encryptedMessage, iv } = req.body;
 
   // Check required fields
   if (!encryptedMessage || !iv) {
@@ -17,7 +17,6 @@ function validateEncryption(req, res, next) {
   try {
     Buffer.from(encryptedMessage, 'base64');
     Buffer.from(iv, 'base64');
-    if (salt) Buffer.from(salt, 'base64');
   } catch (error) {
     return res.status(400).json({
       success: false,

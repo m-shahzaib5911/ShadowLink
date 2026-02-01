@@ -7,7 +7,7 @@ require('dotenv').config();
 // Import custom middleware
 const corsMiddleware = require('./middleware/cors');
 const { errorHandler, notFoundHandler } = require('./middleware/errorHandler');
-const { addRoomConnection, removeRoomConnection, getRoomConnections } = require('./utils/broadcast');
+const { addRoomConnection, removeRoomConnection, getRoomConnections, broadcastToRoom } = require('./utils/broadcast');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -50,11 +50,11 @@ app.use('/api/messages', require('./routes/messages'));
 app.use('/api/relay', require('./routes/relay'));
 
 // Serve static frontend files
-app.use(express.static(path.join(__dirname, '../frontend')));
+app.use(express.static(path.join(__dirname, '../frontend/build')));
 
 // Catch-all handler: send back index.html for SPA
 app.get('*', (req, res) => {
-  res.sendFile(path.join(__dirname, '../frontend/index.html'));
+  res.sendFile(path.join(__dirname, '../frontend/build/index.html'));
 });
 
 // 404 handler
@@ -98,6 +98,20 @@ wss.on('connection', (ws, req) => {
 
   console.log(`User ${userId} joined WebSocket room ${roomId}`);
 
+  // Get user's displayName from room
+  const { rooms } = require('./utils/store');
+  const room = rooms.get(roomId);
+  const user = room?.users.get(userId);
+  const displayName = user?.displayName || userId.substring(0, 8);
+
+  // Broadcast user joined event
+  broadcastToRoom(roomId, {
+    type: 'user_joined',
+    userId: userId,
+    displayName: displayName,
+    timestamp: new Date().toISOString()
+  });
+
   // Handle incoming messages
   ws.on('message', (data) => {
     try {
@@ -121,6 +135,27 @@ wss.on('connection', (ws, req) => {
   // Handle disconnection
   ws.on('close', () => {
     console.log(`User ${userId} left WebSocket room ${roomId}`);
+
+    // Get user's displayName from room
+    const { rooms } = require('./utils/store');
+    const room = rooms.get(roomId);
+    const user = room?.users.get(userId);
+    const displayName = user?.displayName || userId.substring(0, 8);
+
+    // Broadcast user left event
+    broadcastToRoom(roomId, {
+      type: 'user_left',
+      userId: userId,
+      displayName: displayName,
+      timestamp: new Date().toISOString()
+    });
+
+    // Broadcast user left event
+    broadcastToRoom(roomId, {
+      type: 'user_left',
+      userId: userId,
+      timestamp: new Date().toISOString()
+    });
 
     // Remove connection from room
     removeRoomConnection(roomId, ws);

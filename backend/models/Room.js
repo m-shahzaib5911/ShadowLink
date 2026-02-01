@@ -1,9 +1,9 @@
 const { v4: uuidv4 } = require('uuid');
 
 class Room {
-  constructor(id = uuidv4(), key = null, roomName = null, password = null) {
+  constructor(id = uuidv4(), salt = null, roomName = null, password = null) {
     this.id = id;
-    this.key = key; // Encryption key (generated server-side, sent to clients)
+    this.salt = salt; // Salt for encryption (generated server-side, sent to clients)
     this.roomName = roomName; // Room name set by creator
     this.password = password; // Room password for joining
     this.created = new Date();

@@ -57,4 +57,32 @@ async function decrypt(encryptedMessage, ivBase64, keyBase64) {
   }
 }
 
-module.exports = { generateKey, encrypt, decrypt };
+/**
+ * Encode a room ID to URL-safe base64
+ * @param {string} roomId - The room ID to encode
+ * @returns {string} URL-safe base64 encoded room ID
+ */
+function encodeRoomId(roomId) {
+  return Buffer.from(roomId, 'utf8').toString('base64')
+    .replace(/\+/g, '-')
+    .replace(/\//g, '_')
+    .replace(/=/g, '');
+}
+
+/**
+ * Decode a URL-safe base64 encoded room ID
+ * @param {string} encoded - The encoded room ID
+ * @returns {string|null} Decoded room ID or null if invalid
+ */
+function decodeRoomId(encoded) {
+  try {
+    let base64 = encoded.replace(/-/g, '+').replace(/_/g, '/');
+    const padLen = (4 - (base64.length % 4)) % 4;
+    base64 += '='.repeat(padLen);
+    return Buffer.from(base64, 'base64').toString('utf8');
+  } catch (error) {
+    return null;
+  }
+}
+
+module.exports = { generateKey, encrypt, decrypt, encodeRoomId, decodeRoomId };

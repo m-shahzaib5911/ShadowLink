@@ -1,14 +1,13 @@
 const { v4: uuidv4 } = require('uuid');
 
 class Message {
-  constructor(roomId, userId, encryptedMessage, iv, salt, displayName = 'Unknown') {
+  constructor(roomId, userId, encryptedMessage, iv, displayName = 'Unknown') {
     this.id = uuidv4();
     this.roomId = roomId;
     this.userId = userId;
     this.displayName = displayName; // User's display name
     this.encryptedMessage = encryptedMessage; // base64 encoded ciphertext
     this.iv = iv; // base64 encoded nonce
-    this.salt = salt; // base64 encoded salt (for future use)
     this.timestamp = new Date();
     this.expiresAt = new Date(Date.now() + (parseInt(process.env.MESSAGE_RETENTION_SECONDS) || 3600) * 1000);
   }
@@ -27,7 +26,6 @@ class Message {
       displayName: this.displayName,
       encryptedMessage: this.encryptedMessage,
       iv: this.iv,
-      salt: this.salt,
       timestamp: this.timestamp.toISOString(),
       expiresAt: this.expiresAt.toISOString()
     };

@@ -14,7 +14,7 @@ const { broadcastToRoom } = require('../utils/broadcast');
  */
 router.post('/:roomId/send', verifyRoomAccess, verifyUserAccess, validateEncryption, (req, res) => {
   try {
-    const { userId, encryptedMessage, iv, salt } = req.body;
+    const { userId, encryptedMessage, iv } = req.body;
     const roomId = req.params.roomId;
 
     console.log(`[Message Send] Received request`, {roomId, userId, messageLength: encryptedMessage?.length});
@@ -29,7 +29,7 @@ router.post('/:roomId/send', verifyRoomAccess, verifyUserAccess, validateEncrypt
     console.log(`[Message Send] Room found, user verified`, {roomId: room.id, userCount: room.users.size, displayName: user.displayName});
 
     const displayName = user.displayName;
-    const message = new Message(room.id, userId, encryptedMessage, iv, salt, displayName);
+    const message = new Message(room.id, userId, encryptedMessage, iv, displayName);
 
     room.addMessage(message);
     console.log(`[Message Send] Message created and added`, {messageId: message.id, displayName});
@@ -63,6 +63,8 @@ router.get('/:roomId', verifyRoomAccess, verifyUserAccess, (req, res) => {
   const room = req.room;
   const since = req.query.since ? new Date(req.query.since) : null;
 
+  console.log(`[Messages] GET /:roomId: roomId=${req.params.roomId}, userId=${req.query.userId}, since=${since}, total messages=${room.messages.length}`);
+
   let messages = room.messages;
 
   if (since) {
@@ -71,6 +73,8 @@ router.get('/:roomId', verifyRoomAccess, verifyUserAccess, (req, res) => {
 
   // Return only non-expired messages
   messages = messages.filter(msg => !msg.isExpired());
+
+  console.log(`[Messages] Returning ${messages.length} messages`);
 
   res.json({
     success: true,

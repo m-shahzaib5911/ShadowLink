@@ -62,7 +62,7 @@ function isValidEncryptedMessage(encryptedMessage) {
 /**
  * Validate initialization vector
  * @param {string} iv - Base64 IV
- * @returns {boolean} True if valid (24 bytes for XChaCha20)
+ * @returns {boolean} True if valid (12 bytes for AES-GCM)
  */
 function isValidIV(iv) {
   if (!iv || typeof iv !== 'string') {
@@ -71,27 +71,13 @@ function isValidIV(iv) {
 
   try {
     const buffer = Buffer.from(iv, 'base64');
-    return buffer.length === 24;
+    return buffer.length === 12; // AES-GCM uses 12-byte IV
   } catch {
     return false;
   }
 }
 
-/**
- * Validate salt
- * @param {string} salt - Base64 salt
- * @returns {boolean} True if valid
- */
-function isValidSalt(salt) {
-  if (!salt) return true; // Optional
 
-  try {
-    const buffer = Buffer.from(salt, 'base64');
-    return buffer.length >= 16;
-  } catch {
-    return false;
-  }
-}
 
 /**
  * Validate message size
@@ -115,6 +101,5 @@ module.exports = {
   isValidUserId,
   isValidEncryptedMessage,
   isValidIV,
-  isValidSalt,
   isValidMessageSize
 };

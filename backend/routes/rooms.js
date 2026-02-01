@@ -4,6 +4,7 @@ const router = express.Router();
 
 const { rooms } = require('../utils/store');
 const { generateKey } = require('../utils/crypto');
+const { broadcastToRoom } = require('../utils/broadcast');
 const Room = require('../models/Room');
 const User = require('../models/User');
 const { verifyRoomAccess } = require('../middleware/auth');
@@ -15,30 +16,15 @@ const logger = require('../utils/logger');
  */
 router.post('/create', async (req, res) => {
   try {
-    const { roomName, password, displayName, userId, key } = req.body;
+    const { roomName, password, displayName, userId, salt } = req.body;
 
-    if (!roomName || !password || !key) {
-      return res.status(400).json({ success: false, error: 'Room name, password, and key required' });
+    if (!roomName || !password || !salt) {
+      return res.status(400).json({ success: false, error: 'Room name, password, and salt required' });
     }
 
-    // Check if a room with the same name already exists
-    let duplicateRoom = null;
-    for (const room of rooms.values()) {
-      if (room.roomName.toLowerCase() === roomName.toLowerCase()) {
-        duplicateRoom = room;
-        break;
-      }
-    }
-
-    if (duplicateRoom) {
-      return res.status(409).json({ 
-        success: false, 
-        error: `Room "${roomName}" already exists. Please choose a different name.` 
-      });
-    }
 
     const roomId = uuidv4();
-    const room = new Room(roomId, key, roomName, password);
+    const room = new Room(roomId, salt, roomName, password);
 
     // Add creator as first user with the actual userId
     const User = require('../models/User');
@@ -49,12 +35,13 @@ router.post('/create', async (req, res) => {
 
     logger.info('Room created', { roomId, roomName });
 
+    console.log('[Salt Exchange] Sending room salt to creator:', room.salt.substring(0, 10) + '...');
     res.status(201).json({
       success: true,
       room: {
         id: room.id,
         name: room.roomName,
-        key: room.key,
+        salt: room.salt,
         userCount: room.getUserCount(),
         created: room.created.toISOString(),
         expiresAt: room.expiresAt.toISOString()
@@ -73,12 +60,14 @@ router.post('/create', async (req, res) => {
 router.post('/:roomId/join', verifyRoomAccess, async (req, res) => {
   try {
     const { userId, password, displayName } = req.body;
+    console.log(`[Rooms] Join attempt: roomId=${req.params.roomId}, userId=${userId}, displayName=${displayName}`);
 
     if (!userId || !password || !displayName) {
       return res.status(400).json({ success: false, error: 'User ID, password, and display name required' });
     }
 
     const room = req.room;
+    console.log(`[Rooms] Room found for join: roomId=${room.id}, roomName=${room.roomName}`);
 
     // Verify password
     if (room.password !== password) {
@@ -89,15 +78,20 @@ router.post('/:roomId/join', verifyRoomAccess, async (req, res) => {
 
     room.addUser(user);
 
+    // Broadcast system message
+    console.log(`[Broadcast] Sending join message for ${displayName} to room ${room.id}`);
+    broadcastToRoom(room.id, { type: 'system', message: `${displayName} joined the room` });
+
     logger.info('User joined room', { roomId: room.id, userId, displayName });
 
+    console.log('[Salt Exchange] Sending room salt to joiner:', room.salt.substring(0, 10) + '...');
     res.json({
       success: true,
       message: 'Joined room successfully',
       roomInfo: {
         id: room.id,
         name: room.roomName,
-        key: room.key,
+        salt: room.salt,
         userCount: room.getUserCount(),
         created: room.created.toISOString(),
         expiresAt: room.expiresAt.toISOString()
@@ -116,12 +110,18 @@ router.post('/:roomId/join', verifyRoomAccess, async (req, res) => {
 router.get('/:roomId', verifyRoomAccess, (req, res) => {
   const room = req.room;
 
+  // Get list of user display names
+  const users = Array.from(room.users.values()).map(user => ({
+    displayName: user.displayName
+  }));
+
   res.json({
     success: true,
     room: {
       id: room.id,
       name: room.roomName,
       userCount: room.getUserCount(),
+      users: users,
       messageCount: room.getMessageCount(),
       created: room.created.toISOString(),
       expiresAt: room.expiresAt.toISOString()
@@ -142,7 +142,24 @@ router.post('/:roomId/leave', verifyRoomAccess, (req, res) => {
     }
 
     const room = req.room;
+
+    // Get user before removing
+    const user = room.users.get(userId);
+    if (user) {
+      // Broadcast system message
+      console.log(`[Broadcast] Sending leave message for ${user.displayName} to room ${room.id}`);
+      broadcastToRoom(room.id, { type: 'system', message: `${user.displayName} left the room` });
+    }
+
     room.removeUser(userId);
+
+    // Delete room messages and room if no users remain
+    if (room.getUserCount() === 0) {
+      // Clear all messages before deleting room
+      room.messages = [];
+      rooms.delete(room.id);
+      logger.info('Room deleted - no users remaining', { roomId: room.id });
+    }
 
     logger.info('User left room', { roomId: room.id, userId });
 
