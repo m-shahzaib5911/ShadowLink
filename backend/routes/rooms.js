@@ -2,11 +2,8 @@ const express = require('express');
 const { v4: uuidv4 } = require('uuid');
 const router = express.Router();
 
-const { rooms } = require('../utils/store');
-const { generateKey } = require('../utils/crypto');
+const store = require('../utils/store');
 const { broadcastToRoom } = require('../utils/broadcast');
-const Room = require('../models/Room');
-const User = require('../models/User');
 const { verifyRoomAccess } = require('../middleware/auth');
 const logger = require('../utils/logger');
 
@@ -22,16 +19,12 @@ router.post('/create', async (req, res) => {
       return res.status(400).json({ success: false, error: 'Room name, password, and salt required' });
     }
 
-
     const roomId = uuidv4();
-    const room = new Room(roomId, salt, roomName, password);
+    const retentionSeconds = parseInt(process.env.MESSAGE_RETENTION_SECONDS) || 3600;
+    const room = await store.createRoom(roomId, salt, roomName, password, retentionSeconds);
 
-    // Add creator as first user with the actual userId
-    const User = require('../models/User');
-    const creator = new User(userId, roomId, null, displayName);
-    room.addUser(creator);
-
-    rooms.set(roomId, room);
+    // Add creator as first user
+    await store.addUser(userId, roomId, displayName);
 
     logger.info('Room created', { roomId, roomName });
 
@@ -42,7 +35,7 @@ router.post('/create', async (req, res) => {
         id: room.id,
         name: room.roomName,
         salt: room.salt,
-        userCount: room.getUserCount(),
+        userCount: 1,
         created: room.created.toISOString(),
         expiresAt: room.expiresAt.toISOString()
       }
@@ -67,22 +60,20 @@ router.post('/:roomId/join', verifyRoomAccess, async (req, res) => {
     }
 
     const room = req.room;
-    console.log(`[Rooms] Room found for join: roomId=${room.id}, roomName=${room.roomName}`);
 
     // Verify password
     if (room.password !== password) {
       return res.status(403).json({ success: false, error: 'Incorrect password' });
     }
 
-    const user = new User(userId, room.id, null, displayName);
-
-    room.addUser(user);
+    await store.addUser(userId, room.id, displayName);
 
     // Broadcast system message
-    console.log(`[Broadcast] Sending join message for ${displayName} to room ${room.id}`);
     broadcastToRoom(room.id, { type: 'system', message: `${displayName} joined the room` });
 
     logger.info('User joined room', { roomId: room.id, userId, displayName });
+
+    const userCount = await store.getUserCount(room.id);
 
     console.log('[Salt Exchange] Sending room salt to joiner:', room.salt.substring(0, 10) + '...');
     res.json({
@@ -92,7 +83,7 @@ router.post('/:roomId/join', verifyRoomAccess, async (req, res) => {
         id: room.id,
         name: room.roomName,
         salt: room.salt,
-        userCount: room.getUserCount(),
+        userCount,
         created: room.created.toISOString(),
         expiresAt: room.expiresAt.toISOString()
       }
@@ -107,22 +98,21 @@ router.post('/:roomId/join', verifyRoomAccess, async (req, res) => {
  * GET /api/rooms/:roomId
  * Get room information
  */
-router.get('/:roomId', verifyRoomAccess, (req, res) => {
+router.get('/:roomId', verifyRoomAccess, async (req, res) => {
   const room = req.room;
 
-  // Get list of user display names
-  const users = Array.from(room.users.values()).map(user => ({
-    displayName: user.displayName
-  }));
+  const users = await store.getRoomUsers(room.id);
+  const userCount = users.length;
+  const messageCount = await store.getMessageCount(room.id);
 
   res.json({
     success: true,
     room: {
       id: room.id,
       name: room.roomName,
-      userCount: room.getUserCount(),
-      users: users,
-      messageCount: room.getMessageCount(),
+      userCount,
+      users: users.map(u => ({ displayName: u.displayName })),
+      messageCount,
       created: room.created.toISOString(),
       expiresAt: room.expiresAt.toISOString()
     }
@@ -133,7 +123,7 @@ router.get('/:roomId', verifyRoomAccess, (req, res) => {
  * POST /api/rooms/:roomId/leave
  * Leave a room
  */
-router.post('/:roomId/leave', verifyRoomAccess, (req, res) => {
+router.post('/:roomId/leave', verifyRoomAccess, async (req, res) => {
   try {
     const { userId } = req.body;
 
@@ -144,20 +134,16 @@ router.post('/:roomId/leave', verifyRoomAccess, (req, res) => {
     const room = req.room;
 
     // Get user before removing
-    const user = room.users.get(userId);
+    const user = await store.getUser(userId, room.id);
     if (user) {
-      // Broadcast system message
-      console.log(`[Broadcast] Sending leave message for ${user.displayName} to room ${room.id}`);
       broadcastToRoom(room.id, { type: 'system', message: `${user.displayName} left the room` });
     }
 
-    room.removeUser(userId);
+    await store.removeUser(userId, room.id);
 
-    // Delete room messages and room if no users remain
-    if (room.getUserCount() === 0) {
-      // Clear all messages before deleting room
-      room.messages = [];
-      rooms.delete(room.id);
+    // Delete room if no users remain
+    const deleted = await store.deleteRoomIfEmpty(room.id);
+    if (deleted) {
       logger.info('Room deleted - no users remaining', { roomId: room.id });
     }
 

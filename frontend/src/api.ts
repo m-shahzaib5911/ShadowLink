@@ -1,9 +1,6 @@
-// Use current origin for API base URL (works in dev and production)
+// Use current origin for API base URL 
 const getApiBaseUrl = (): string => {
-  const origin = window.location.origin;
-  // If running on same port, no /api suffix needed (backend serves API)
-  // Otherwise, append /api for separate backend
-  return origin;
+  return `${window.location.origin}/api`;
 };
 
 const API_BASE_URL = getApiBaseUrl();
@@ -238,8 +235,9 @@ export const connectWebSocket = (
   userId: string,
   callbacks: WebSocketCallbacks = {}
 ): WebSocket => {
-  const wsUrl = `ws://localhost:3000?roomId=${roomId}&userId=${userId}`;
-  
+  const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+  const wsUrl = `${wsProtocol}//${window.location.host}?roomId=${roomId}&userId=${userId}`;
+
   socket = new WebSocket(wsUrl);
 
   socket.onopen = () => {

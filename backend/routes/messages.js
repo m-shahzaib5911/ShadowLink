@@ -1,8 +1,8 @@
 const express = require('express');
+const { v4: uuidv4 } = require('uuid');
 const router = express.Router();
 
-const { rooms } = require('../utils/store');
-const Message = require('../models/Message');
+const store = require('../utils/store');
 const { verifyRoomAccess, verifyUserAccess } = require('../middleware/auth');
 const { validateEncryption } = require('../middleware/encryption');
 const logger = require('../utils/logger');
@@ -12,35 +12,37 @@ const { broadcastToRoom } = require('../utils/broadcast');
  * POST /api/messages/:roomId/send
  * Send an encrypted message to a room
  */
-router.post('/:roomId/send', verifyRoomAccess, verifyUserAccess, validateEncryption, (req, res) => {
+router.post('/:roomId/send', verifyRoomAccess, verifyUserAccess, validateEncryption, async (req, res) => {
   try {
     const { userId, encryptedMessage, iv } = req.body;
     const roomId = req.params.roomId;
 
-    console.log(`[Message Send] Received request`, {roomId, userId, messageLength: encryptedMessage?.length});
-
     if (!userId) {
-      console.log('[Message Send] Missing userId');
       return res.status(400).json({ success: false, error: 'User ID required' });
     }
 
-    const room = req.room;
     const user = req.user;
-    console.log(`[Message Send] Room found, user verified`, {roomId: room.id, userCount: room.users.size, displayName: user.displayName});
-
     const displayName = user.displayName;
-    const message = new Message(room.id, userId, encryptedMessage, iv, displayName);
+    const retentionSeconds = parseInt(process.env.MESSAGE_RETENTION_SECONDS) || 3600;
+    const messageId = uuidv4();
 
-    room.addMessage(message);
-    console.log(`[Message Send] Message created and added`, {messageId: message.id, displayName});
+    const message = await store.addMessage(messageId, roomId, userId, displayName, encryptedMessage, iv, retentionSeconds);
 
     // Broadcast message to all WebSocket clients in the room
     const messageData = {
       type: 'new_message',
-      message: message.toJSON()
+      message: {
+        id: message.id,
+        roomId: message.roomId,
+        userId: message.userId,
+        displayName: message.displayName,
+        encryptedMessage: message.encryptedMessage,
+        iv: message.iv,
+        timestamp: message.timestamp.toISOString(),
+        expiresAt: message.expiresAt.toISOString()
+      }
     };
-    broadcastToRoom(room.id, messageData);
-    console.log(`[Message Send] Broadcasted to room`);
+    broadcastToRoom(roomId, messageData);
 
     res.status(201).json({
       success: true,
@@ -59,26 +61,24 @@ router.post('/:roomId/send', verifyRoomAccess, verifyUserAccess, validateEncrypt
  * GET /api/messages/:roomId
  * Retrieve messages from a room
  */
-router.get('/:roomId', verifyRoomAccess, verifyUserAccess, (req, res) => {
-  const room = req.room;
+router.get('/:roomId', verifyRoomAccess, verifyUserAccess, async (req, res) => {
+  const roomId = req.params.roomId;
   const since = req.query.since ? new Date(req.query.since) : null;
 
-  console.log(`[Messages] GET /:roomId: roomId=${req.params.roomId}, userId=${req.query.userId}, since=${since}, total messages=${room.messages.length}`);
-
-  let messages = room.messages;
-
-  if (since) {
-    messages = messages.filter(msg => msg.timestamp > since);
-  }
-
-  // Return only non-expired messages
-  messages = messages.filter(msg => !msg.isExpired());
-
-  console.log(`[Messages] Returning ${messages.length} messages`);
+  const messages = await store.getMessages(roomId, since);
 
   res.json({
     success: true,
-    messages: messages.map(msg => msg.toJSON())
+    messages: messages.map(msg => ({
+      id: msg.id,
+      roomId: msg.roomId,
+      userId: msg.userId,
+      displayName: msg.displayName,
+      encryptedMessage: msg.encryptedMessage,
+      iv: msg.iv,
+      timestamp: msg.timestamp instanceof Date ? msg.timestamp.toISOString() : msg.timestamp,
+      expiresAt: msg.expiresAt instanceof Date ? msg.expiresAt.toISOString() : msg.expiresAt
+    }))
   });
 });
 
@@ -86,20 +86,15 @@ router.get('/:roomId', verifyRoomAccess, verifyUserAccess, (req, res) => {
  * POST /api/messages/cleanup
  * Clean up expired messages across all rooms
  */
-router.post('/cleanup', (req, res) => {
-  let cleanedCount = 0;
+router.post('/cleanup', async (req, res) => {
+  const cleanedMessages = await store.cleanupExpiredMessages();
+  const cleanedRooms = await store.cleanupExpiredRooms();
 
-  for (const room of rooms.values()) {
-    const before = room.messages.length;
-    room.messages = room.messages.filter(msg => !msg.isExpired());
-    cleanedCount += before - room.messages.length;
-  }
-
-  logger.info('Messages cleaned up', { cleanedCount });
+  logger.info('Cleanup complete', { cleanedMessages, cleanedRooms });
 
   res.json({
     success: true,
-    message: `Cleaned up ${cleanedCount} expired messages`
+    message: `Cleaned up ${cleanedMessages} expired messages and ${cleanedRooms} expired rooms`
   });
 });
 

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import './App.css';
 
 // Import API functions
@@ -67,6 +67,18 @@ const App: React.FC = () => {
   const [roomUsers, setRoomUsers] = useState<any[]>([]);
   const [error, setError] = useState<string | null>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const messagesEndRef = useRef<HTMLDivElement>(null);
+  const userRoomsRef = useRef<UserRoom[]>([]);
+  const currentRoomRef = useRef<Room | null>(null);
+
+  // Keep refs in sync with state
+  useEffect(() => { userRoomsRef.current = userRooms; }, [userRooms]);
+  useEffect(() => { currentRoomRef.current = currentRoom; }, [currentRoom]);
+
+  // Auto-scroll to bottom when messages change
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [messages]);
 
   useEffect(() => {
     // Room history is not saved - users start fresh on each session
@@ -140,9 +152,9 @@ const App: React.FC = () => {
         trail.style.pointerEvents = 'none';
         trail.style.zIndex = '999';
         trail.style.animation = 'fadeOut 1s ease-out forwards';
-        
+
         document.body.appendChild(trail);
-        
+
         setTimeout(() => trail.remove(), 1000);
       }
     };
@@ -167,7 +179,7 @@ const App: React.FC = () => {
 
     return () => clearInterval(glitchInterval);
   }, []);
-  
+
   // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => {
     const urlParams = new URLSearchParams(window.location.search);
@@ -189,7 +201,7 @@ const App: React.FC = () => {
       setError('Password must be at least 4 characters');
       return;
     }
-    
+
     const newUserId = generateUserId();
     setError(null);
     try {
@@ -231,7 +243,7 @@ const App: React.FC = () => {
       setError('Passwords do not match');
       return;
     }
-    
+
     const newUserId = generateUserId();
     setError(null);
     try {
@@ -266,18 +278,23 @@ const App: React.FC = () => {
       setError('Failed to join room: ' + (error as Error).message);
     }
   };
-  
+
 
   const handleLeaveRoom = async () => {
     if (!currentRoom) return;
 
     try {
-      await leaveRoom(currentRoom.id, generateUserId());
+      // Find the actual userId stored for this room
+      const userRoom = userRooms.find(r => r.roomId === currentRoom.id);
+      const actualUserId = userRoom?.userId || '';
+
+      await leaveRoom(currentRoom.id, actualUserId);
 
       // Update state - room history is not saved
       setUserRooms(userRooms.filter(room => room.roomId !== currentRoom.id));
       setCurrentRoom(null);
       setMessages([]);
+      setRoomUsers([]);
 
       // Disconnect WebSocket
       disconnectWebSocket();
@@ -327,7 +344,7 @@ const App: React.FC = () => {
       const userRoom = userRooms.find(r => r.roomId === roomId);
       const msgUserId = userRoom?.userId || generateUserId();
       const messages = await getMessages(roomId, msgUserId);
-      
+
       if (userRoom && userRoom.password && userRoom.salt) {
         // Decrypt messages
         const key = await generateKey(userRoom.password, userRoom.salt);
@@ -351,12 +368,16 @@ const App: React.FC = () => {
     }
   };
 
-  const handleWebSocketMessage = async (wsMessage: any) => {
+  // Use useCallback with refs to avoid stale closure issues
+  const handleWebSocketMessage = useCallback(async (wsMessage: any) => {
+    const rooms = userRoomsRef.current;
+    const room = currentRoomRef.current;
+
     if (wsMessage.type === 'new_message') {
       const msg = wsMessage.message;
-      
+
       // Try to decrypt the message
-      const userRoom = userRooms.find(r => r.roomId === currentRoom?.id);
+      const userRoom = rooms.find(r => r.roomId === room?.id);
       if (userRoom && userRoom.password && userRoom.salt && msg.encryptedMessage) {
         try {
           const key = await generateKey(userRoom.password, userRoom.salt);
@@ -367,12 +388,12 @@ const App: React.FC = () => {
           msg.decryptedMessage = '[Decryption failed]';
         }
       }
-      
+
       setMessages(prev => [...prev, msg]);
     } else if (wsMessage.type === 'system') {
       setMessages(prev => [...prev, {
         id: 'system-' + Date.now(),
-        roomId: currentRoom?.id || '',
+        roomId: room?.id || '',
         userId: 'system',
         encryptedMessage: '',
         iv: '',
@@ -384,7 +405,7 @@ const App: React.FC = () => {
       // Show notification for user join
       setMessages(prev => [...prev, {
         id: 'join-' + Date.now(),
-        roomId: currentRoom?.id || '',
+        roomId: room?.id || '',
         userId: 'system',
         encryptedMessage: '',
         iv: '',
@@ -394,11 +415,11 @@ const App: React.FC = () => {
         isJoinNotification: true
       }]);
       // Fetch updated user list
-      if (currentRoom) {
+      if (room) {
         try {
-          const userRoom = userRooms.find(r => r.roomId === currentRoom.id);
-          const wsUserId = userRoom?.userId || generateUserId();
-          const info = await getRoomInfo(currentRoom.id, wsUserId);
+          const userRoom = rooms.find(r => r.roomId === room.id);
+          const wsUserId = userRoom?.userId || '';
+          const info = await getRoomInfo(room.id, wsUserId);
           setRoomUsers(info.room.users || []);
         } catch (error) {
           console.error('Failed to update user list:', error);
@@ -408,7 +429,7 @@ const App: React.FC = () => {
       // Show notification for user leave
       setMessages(prev => [...prev, {
         id: 'leave-' + Date.now(),
-        roomId: currentRoom?.id || '',
+        roomId: room?.id || '',
         userId: 'system',
         encryptedMessage: '',
         iv: '',
@@ -418,27 +439,28 @@ const App: React.FC = () => {
         isLeaveNotification: true
       }]);
       // Fetch updated user list
-      if (currentRoom) {
+      if (room) {
         try {
-          const userRoom = userRooms.find(r => r.roomId === currentRoom.id);
-          const wsUserId = userRoom?.userId || generateUserId();
-          const info = await getRoomInfo(currentRoom.id, wsUserId);
+          const userRoom = rooms.find(r => r.roomId === room.id);
+          const wsUserId = userRoom?.userId || '';
+          const info = await getRoomInfo(room.id, wsUserId);
           setRoomUsers(info.room.users || []);
         } catch (error) {
           console.error('Failed to update user list:', error);
         }
       }
     }
-  };
+  }, []);
 
   const handleSelectRoom = async (room: UserRoom) => {
     try {
-      const roomInfo = await getRoomInfo(room.roomId, generateUserId());
+      const storedUserId = room.userId || '';
+      const roomInfo = await getRoomInfo(room.roomId, storedUserId);
       setCurrentRoom(roomInfo.room);
       setRoomUsers(roomInfo.room.users || []);
 
-      // Connect to WebSocket
-      connectWebSocket(room.roomId, generateUserId(), {
+      // Connect to WebSocket with the stored userId
+      connectWebSocket(room.roomId, storedUserId, {
         onMessage: handleWebSocketMessage
       });
 
@@ -480,7 +502,7 @@ const App: React.FC = () => {
     <div className="app">
       {/* Matrix Rain Background */}
       <canvas ref={canvasRef} id="matrix-canvas"></canvas>
-      
+
       {/* Scanlines */}
       <div className="scanlines"></div>
 
@@ -554,16 +576,16 @@ const App: React.FC = () => {
                   <div className="warning-icon">⚠</div>
                   <h1 className="warning-title">UNAUTHORIZED ACCESS</h1>
                 </div>
-                
+
                 <div className="terminal-content">
                   <div className="terminal-line">Welcome to the shadows, <span className="highlight">Anonymous</span>.</div>
                   <div className="terminal-line">This is an <span className="highlight">encrypted peer-to-peer communication network</span>.</div>
                   <div className="terminal-line">All traffic is routed through multiple encryption layers.</div>
-                  
+
                   <div className="command-line">
                     $ Your IP: HIDDEN | Location: SPOOFED | Identity: ANONYMOUS
                   </div>
-                  
+
                   <div className="terminal-line">Create a new secure channel or join an existing one.</div>
                   <div className="terminal-line"><span className="highlight">Remember:</span> Leave no trace. Trust no one.</div>
                 </div>
@@ -599,20 +621,21 @@ const App: React.FC = () => {
                     <button className="btn btn-small btn-danger" onClick={handleLeaveRoom}>Leave</button>
                   </div>
                 </div>
-                
+
                 <div className="messages-container">
                   {error && <div className="error-message">{error}</div>}
                   {messages.map(message => (
-                    <div 
-                      key={message.id} 
+                    <div
+                      key={message.id}
                       className={`message ${message.isJoinNotification ? 'join-notification' : ''} ${message.isLeaveNotification ? 'leave-notification' : ''}`}
                     >
                       <span className="message-time">[{formatTime(message.timestamp)}]</span>
                       <strong>{message.displayName}:</strong> {message.decryptedMessage || message.encryptedMessage}
                     </div>
                   ))}
+                  <div ref={messagesEndRef} />
                 </div>
-                
+
                 <div className="message-input-area">
                   <input
                     type="text"
@@ -660,7 +683,7 @@ const App: React.FC = () => {
               />
               <div className="modal-actions">
                 <button className="btn btn-primary" onClick={handleCreateRoom}>CREATE</button>
-                <button className="btn btn-secondary" onClick={() => { setShowCreateModal(false); setError(null); }}>CANCEL</button>
+                <button className="btn btn-secondary" onClick={() => { setShowCreateModal(false); setError(null); setRoomName(''); setRoomPassword(''); setConfirmRoomPassword(''); }}>CANCEL</button>
               </div>
             </div>
           </div>
@@ -698,7 +721,7 @@ const App: React.FC = () => {
               />
               <div className="modal-actions">
                 <button className="btn btn-primary" onClick={handleJoinRoom}>JOIN</button>
-                <button className="btn btn-secondary" onClick={() => { setShowJoinModal(false); setError(null); }}>CANCEL</button>
+                <button className="btn btn-secondary" onClick={() => { setShowJoinModal(false); setError(null); setJoinRoomId(''); setJoinPassword(''); setConfirmJoinPassword(''); setJoinDisplayName(''); }}>CANCEL</button>
               </div>
             </div>
           </div>
