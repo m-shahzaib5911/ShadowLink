@@ -1,4 +1,5 @@
 <?php
+
 /**
  * ShadowLink PHP Backend — Database Configuration
  * Handles MySQL connection and CORS headers 
@@ -18,10 +19,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
 
 // ==================== DATABASE CONFIGURATION ====================
 // Update these values with your InfinityFree/AeonFree MySQL credentials
-$DB_HOST = getenv('DB_HOST') ?: 'localhost';
-$DB_NAME = getenv('DB_NAME') ?: 'shadowlink';
-$DB_USER = getenv('DB_USER') ?: 'root';
-$DB_PASS = getenv('DB_PASS') ?: '';
+$DB_HOST = getenv('DB_HOST') ?: 'sql302.iceiy.com';
+$DB_NAME = getenv('DB_NAME') ?: 'icei_41316933_Host';
+$DB_USER = getenv('DB_USER') ?: 'icei_41316933';
+$DB_PASS = getenv('DB_PASS') ?: 'wcG27yPCZ6iv';
 $DB_PORT = getenv('DB_PORT') ?: '3306';
 
 // Message retention in seconds (1 hour default)
@@ -50,7 +51,8 @@ try {
 /**
  * Generate a UUID v4
  */
-function generateUUID() {
+function generateUUID()
+{
     $data = random_bytes(16);
     $data[6] = chr(ord($data[6]) & 0x0f | 0x40);
     $data[8] = chr(ord($data[8]) & 0x3f | 0x80);
@@ -60,7 +62,8 @@ function generateUUID() {
 /**
  * Get JSON body from request
  */
-function getRequestBody() {
+function getRequestBody()
+{
     $body = file_get_contents('php://input');
     return json_decode($body, true) ?: [];
 }
@@ -68,7 +71,8 @@ function getRequestBody() {
 /**
  * Send JSON response
  */
-function jsonResponse($data, $statusCode = 200) {
+function jsonResponse($data, $statusCode = 200)
+{
     http_response_code($statusCode);
     echo json_encode($data);
     exit();
@@ -77,7 +81,8 @@ function jsonResponse($data, $statusCode = 200) {
 /**
  * Clean up expired rooms and messages
  */
-function cleanupExpired($pdo) {
+function cleanupExpired($pdo)
+{
     try {
         $pdo->exec("DELETE FROM messages WHERE expires_at <= NOW()");
         $pdo->exec("DELETE FROM users WHERE room_id NOT IN (SELECT id FROM rooms)");

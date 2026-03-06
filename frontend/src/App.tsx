@@ -435,7 +435,12 @@ const App: React.FC = () => {
 
   const formatTime = (timestamp: string): string => {
     try {
-      const date = new Date(timestamp);
+      // MySQL timestamps come without timezone — treat them as UTC
+      // then toLocaleTimeString will convert to user's local timezone
+      const utcTimestamp = timestamp.includes('T') || timestamp.includes('Z')
+        ? timestamp
+        : timestamp.replace(' ', 'T') + 'Z';
+      const date = new Date(utcTimestamp);
       return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
     } catch {
       return '';
