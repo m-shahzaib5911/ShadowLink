@@ -1,4 +1,5 @@
 <?php
+
 /**
  * ShadowLink PHP Backend — Rooms API
  * 
@@ -38,9 +39,10 @@ switch ($action) {
         $expiresAt = date('Y-m-d H:i:s', time() + $retention);
         $createdAt = date('Y-m-d H:i:s');
 
-        // Create room
+        // Create room — hash password so plaintext is never stored
+        $hashedPassword = password_hash($password, PASSWORD_BCRYPT);
         $stmt = $pdo->prepare('INSERT INTO rooms (id, salt, room_name, password, created_at, expires_at) VALUES (?, ?, ?, ?, ?, ?)');
-        $stmt->execute([$roomId, $salt, $roomName, $password, $createdAt, $expiresAt]);
+        $stmt->execute([$roomId, $salt, $roomName, $hashedPassword, $createdAt, $expiresAt]);
 
         // Add creator as first user
         $stmt = $pdo->prepare('INSERT INTO users (id, room_id, display_name) VALUES (?, ?, ?)');
@@ -79,8 +81,8 @@ switch ($action) {
             jsonResponse(['success' => false, 'error' => 'Room not found'], 404);
         }
 
-        // Verify password
-        if ($room['password'] !== $password) {
+        // Verify password against bcrypt hash
+        if (!password_verify($password, $room['password'])) {
             jsonResponse(['success' => false, 'error' => 'Incorrect password'], 403);
         }
 
@@ -88,11 +90,8 @@ switch ($action) {
         $stmt = $pdo->prepare('INSERT INTO users (id, room_id, display_name) VALUES (?, ?, ?) ON DUPLICATE KEY UPDATE display_name = VALUES(display_name)');
         $stmt->execute([$userId, $roomId, $displayName]);
 
-        // Add system message for join
-        $msgId = generateUUID();
-        $expiresAt = date('Y-m-d H:i:s', time() + ($GLOBALS['MESSAGE_RETENTION'] ?? 3600));
-        $stmt = $pdo->prepare('INSERT INTO messages (id, room_id, user_id, display_name, encrypted_message, iv, expires_at) VALUES (?, ?, ?, ?, ?, ?, ?)');
-        $stmt->execute([$msgId, $roomId, 'system', 'System', $displayName . ' joined the room', '', $expiresAt]);
+        // No system join message stored in DB for privacy
+        // Join/leave events detected client-side via user list polling
 
         // Count users
         $stmt = $pdo->prepare('SELECT COUNT(*) as count FROM users WHERE room_id = ?');
@@ -132,11 +131,8 @@ switch ($action) {
         $stmt = $pdo->prepare('DELETE FROM users WHERE id = ? AND room_id = ?');
         $stmt->execute([$userId, $roomId]);
 
-        // Add system message for leave
-        $msgId = generateUUID();
-        $expiresAt = date('Y-m-d H:i:s', time() + ($GLOBALS['MESSAGE_RETENTION'] ?? 3600));
-        $stmt = $pdo->prepare('INSERT INTO messages (id, room_id, user_id, display_name, encrypted_message, iv, expires_at) VALUES (?, ?, ?, ?, ?, ?, ?)');
-        $stmt->execute([$msgId, $roomId, 'system', 'System', $displayName . ' left the room', '', $expiresAt]);
+        // No system leave message stored in DB for privacy
+        // Leave events detected client-side via user list polling
 
         // Delete room if no users remain
         $stmt = $pdo->prepare('SELECT COUNT(*) as count FROM users WHERE room_id = ?');
@@ -186,7 +182,9 @@ switch ($action) {
                 'name' => $room['room_name'],
                 'salt' => $room['salt'],
                 'userCount' => count($users),
-                'users' => array_map(function($u) { return ['displayName' => $u['display_name']]; }, $users),
+                'users' => array_map(function ($u) {
+                    return ['displayName' => $u['display_name']];
+                }, $users),
                 'messageCount' => $messageCount,
                 'created' => $room['created_at'],
                 'expiresAt' => $room['expires_at']
