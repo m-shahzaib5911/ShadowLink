@@ -84,13 +84,13 @@ body {
 
 .skull-container {
   position: relative;
-  width: 150px;
-  height: 150px;
-  margin-bottom: 2rem;
+  width: 100px;
+  height: 100px;
+  margin-bottom: 1rem;
 }
 
 .skull {
-  font-size: 8rem;
+  font-size: 5rem;
   animation: glitchSkull 3s infinite, rotate3d 4s ease-in-out infinite;
   filter: drop-shadow(0 0 30px var(--terminal-green));
   text-shadow: 
@@ -112,10 +112,10 @@ body {
 
 .terminal-text {
   font-family: 'Courier Prime', monospace;
-  font-size: 1.8rem;
+  font-size: 1.3rem;
   font-weight: 700;
-  letter-spacing: 3px;
-  margin-bottom: 1rem;
+  letter-spacing: 2px;
+  margin-bottom: 0.75rem;
   animation: textGlitch 2s infinite;
 }
 
@@ -143,8 +143,8 @@ body {
 .loading-status {
   font-family: 'Share Tech Mono', monospace;
   color: var(--terminal-green);
-  font-size: 0.9rem;
-  margin-bottom: 2rem;
+  font-size: 0.75rem;
+  margin-bottom: 1.5rem;
   opacity: 0.7;
   letter-spacing: 2px;
 }
@@ -205,7 +205,7 @@ body {
 
 /* Header */
 .header {
-  padding: 1.2rem 2rem;
+  padding: 0.6rem 1.5rem;
   display: flex;
   justify-content: space-between;
   align-items: center;
@@ -224,7 +224,7 @@ body {
 }
 
 .logo-skull {
-  font-size: 1.8rem;
+  font-size: 1.3rem;
   animation: logoGlitch 5s infinite;
   filter: drop-shadow(0 0 10px var(--terminal-green));
 }
@@ -237,7 +237,7 @@ body {
 
 .logo {
   font-family: 'Rajdhani', sans-serif;
-  font-size: 1.6rem;
+  font-size: 1.2rem;
   font-weight: 700;
   color: var(--terminal-green);
   text-shadow: 
@@ -250,8 +250,8 @@ body {
 .status-bar {
   display: flex;
   align-items: center;
-  gap: 2rem;
-  font-size: 0.85rem;
+  gap: 1.5rem;
+  font-size: 0.7rem;
 }
 
 .status-item {
@@ -292,10 +292,11 @@ body {
 
 /* Sidebar */
 .sidebar {
-  width: 320px;
+  width: 220px;
+  min-width: 220px;
   background: rgba(10, 10, 10, 0.95);
   border-right: 1px solid var(--terminal-green);
-  padding: 2rem 1.5rem;
+  padding: 1rem 1rem;
   display: flex;
   flex-direction: column;
   gap: 1.5rem;
@@ -305,8 +306,8 @@ body {
 .terminal-prompt {
   font-family: 'Courier Prime', monospace;
   color: var(--terminal-green);
-  font-size: 0.9rem;
-  margin-bottom: 1rem;
+  font-size: 0.7rem;
+  margin-bottom: 0.5rem;
   opacity: 0.7;
 }
 
@@ -316,12 +317,12 @@ body {
 }
 
 .btn {
-  padding: 1rem 1.5rem;
+  padding: 0.6rem 1rem;
   border: 2px solid var(--terminal-green);
   background: transparent;
   color: var(--terminal-green);
   font-family: 'Rajdhani', sans-serif;
-  font-size: 1rem;
+  font-size: 0.8rem;
   font-weight: 600;
   cursor: crosshair;
   transition: all 0.3s ease;
@@ -479,15 +480,15 @@ body {
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: 3rem;
+  padding: 1.5rem;
   position: relative;
 }
 
 .warning-box {
-  max-width: 700px;
+  max-width: 600px;
   background: rgba(0, 0, 0, 0.95);
   border: 2px solid var(--blood-red);
-  padding: 3rem;
+  padding: 1.5rem 2rem;
   position: relative;
   box-shadow: 
     0 0 30px rgba(255, 0, 81, 0.3),
@@ -527,7 +528,7 @@ body {
 }
 
 .warning-icon {
-  font-size: 3rem;
+  font-size: 2rem;
   animation: warningPulse 2s infinite;
 }
 
@@ -544,7 +545,7 @@ body {
 
 .warning-title {
   font-family: 'Rajdhani', sans-serif;
-  font-size: 2.5rem;
+  font-size: 1.8rem;
   font-weight: 700;
   color: var(--blood-red);
   text-transform: uppercase;
@@ -557,8 +558,9 @@ body {
 .terminal-content {
   font-family: 'Courier Prime', monospace;
   color: var(--terminal-green);
-  line-height: 1.8;
-  margin-bottom: 2rem;
+  line-height: 1.6;
+  margin-bottom: 1rem;
+  font-size: 0.8rem;
 }
 
 .terminal-line {
@@ -666,7 +668,7 @@ body {
 
 .chat-header h3 {
   font-family: 'Rajdhani', sans-serif;
-  font-size: 1.5rem;
+  font-size: 1.2rem;
   font-weight: 700;
   color: var(--terminal-green);
   text-transform: uppercase;
