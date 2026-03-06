@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import './App.css';
 
 // Import API functions
@@ -9,8 +9,9 @@ import {
   leaveRoom,
   sendMessage,
   getMessages,
-  connectWebSocket,
-  disconnectWebSocket
+  startPolling,
+  stopPolling,
+  generateUserId
 } from './api';
 import { generateKey, encryptMessage, decryptMessage } from './utils/encryption';
 
@@ -68,12 +69,7 @@ const App: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
-  const userRoomsRef = useRef<UserRoom[]>([]);
-  const currentRoomRef = useRef<Room | null>(null);
-
-  // Keep refs in sync with state
-  useEffect(() => { userRoomsRef.current = userRooms; }, [userRooms]);
-  useEffect(() => { currentRoomRef.current = currentRoom; }, [currentRoom]);
+  const knownMessageIds = useRef<Set<string>>(new Set());
 
   // Auto-scroll to bottom when messages change
   useEffect(() => {
@@ -220,13 +216,8 @@ const App: React.FC = () => {
       setShowCreateModal(false);
       setError(null);
 
-      // Connect to WebSocket
-      connectWebSocket(room.id, newUserId, {
-        onMessage: handleWebSocketMessage
-      });
-
-      // Load messages
-      loadMessages(room.id);
+      // Start polling for new messages (replaces WebSocket)
+      startPollingForRoom(room.id, newUserId, roomPassword, room.salt);
 
       // Load room users
       const info = await getRoomInfo(room.id, newUserId);
@@ -247,7 +238,8 @@ const App: React.FC = () => {
     const newUserId = generateUserId();
     setError(null);
     try {
-      const roomInfo = await joinRoom(joinRoomId, joinPassword, joinDisplayName, newUserId);
+      const result = await joinRoom(joinRoomId, joinPassword, joinDisplayName, newUserId);
+      const roomInfo = result.roomInfo;
 
       // Update state - room history is not saved
       setUserRooms([...userRooms, {
@@ -262,13 +254,8 @@ const App: React.FC = () => {
       setShowJoinModal(false);
       setError(null);
 
-      // Connect to WebSocket
-      connectWebSocket(roomInfo.id, newUserId, {
-        onMessage: handleWebSocketMessage
-      });
-
-      // Load messages
-      loadMessages(roomInfo.id);
+      // Start polling for new messages (replaces WebSocket)
+      startPollingForRoom(roomInfo.id, newUserId, joinPassword, roomInfo.salt);
 
       // Load room users
       const info = await getRoomInfo(roomInfo.id, newUserId);
@@ -296,8 +283,8 @@ const App: React.FC = () => {
       setMessages([]);
       setRoomUsers([]);
 
-      // Disconnect WebSocket
-      disconnectWebSocket();
+      // Stop polling
+      stopPolling();
     } catch (error) {
       console.error('Error leaving room:', error);
     }
@@ -368,89 +355,52 @@ const App: React.FC = () => {
     }
   };
 
-  // Use useCallback with refs to avoid stale closure issues
-  const handleWebSocketMessage = useCallback(async (wsMessage: any) => {
-    const rooms = userRoomsRef.current;
-    const room = currentRoomRef.current;
+  // Polling-based message handler — decrypts new messages as they arrive
+  const startPollingForRoom = (roomId: string, userId: string, password: string, salt: string) => {
+    knownMessageIds.current = new Set();
 
-    if (wsMessage.type === 'new_message') {
-      const msg = wsMessage.message;
+    startPolling(roomId, userId, {
+      onNewMessages: async (newMessages: any[]) => {
+        // Filter out messages we've already seen
+        const unseen = newMessages.filter(m => !knownMessageIds.current.has(m.id));
+        if (unseen.length === 0) return;
 
-      // Try to decrypt the message
-      const userRoom = rooms.find(r => r.roomId === room?.id);
-      if (userRoom && userRoom.password && userRoom.salt && msg.encryptedMessage) {
-        try {
-          const key = await generateKey(userRoom.password, userRoom.salt);
-          const decrypted = await decryptMessage(msg.encryptedMessage, msg.iv, key);
-          msg.decryptedMessage = decrypted;
-        } catch (e) {
-          console.error('Failed to decrypt WebSocket message:', e);
-          msg.decryptedMessage = '[Decryption failed]';
-        }
-      }
+        unseen.forEach(m => knownMessageIds.current.add(m.id));
 
-      setMessages(prev => [...prev, msg]);
-    } else if (wsMessage.type === 'system') {
-      setMessages(prev => [...prev, {
-        id: 'system-' + Date.now(),
-        roomId: room?.id || '',
-        userId: 'system',
-        encryptedMessage: '',
-        iv: '',
-        displayName: 'System',
-        timestamp: new Date().toISOString(),
-        decryptedMessage: wsMessage.message
-      }]);
-    } else if (wsMessage.type === 'user_joined') {
-      // Show notification for user join
-      setMessages(prev => [...prev, {
-        id: 'join-' + Date.now(),
-        roomId: room?.id || '',
-        userId: 'system',
-        encryptedMessage: '',
-        iv: '',
-        displayName: 'System',
-        timestamp: new Date().toISOString(),
-        decryptedMessage: `${wsMessage.displayName} joined the room`,
-        isJoinNotification: true
-      }]);
-      // Fetch updated user list
-      if (room) {
-        try {
-          const userRoom = rooms.find(r => r.roomId === room.id);
-          const wsUserId = userRoom?.userId || '';
-          const info = await getRoomInfo(room.id, wsUserId);
-          setRoomUsers(info.room.users || []);
-        } catch (error) {
-          console.error('Failed to update user list:', error);
-        }
+        // Decrypt messages
+        const processed = await Promise.all(unseen.map(async (msg: any) => {
+          if (msg.userId === 'system') {
+            // System messages (join/leave) are plaintext
+            return {
+              ...msg,
+              decryptedMessage: msg.encryptedMessage,
+              isJoinNotification: msg.encryptedMessage.includes('joined'),
+              isLeaveNotification: msg.encryptedMessage.includes('left')
+            };
+          }
+
+          if (password && salt && msg.encryptedMessage && msg.iv) {
+            try {
+              const key = await generateKey(password, salt);
+              const decrypted = await decryptMessage(msg.encryptedMessage, msg.iv, key);
+              return { ...msg, decryptedMessage: decrypted };
+            } catch (e) {
+              return { ...msg, decryptedMessage: '[Decryption failed]' };
+            }
+          }
+          return msg;
+        }));
+
+        setMessages(prev => [...prev, ...processed]);
+      },
+      onUsersUpdate: (users: any[]) => {
+        setRoomUsers(users.map(u => ({ displayName: u.displayName })));
+      },
+      onError: (error: Error) => {
+        console.error('Polling error:', error);
       }
-    } else if (wsMessage.type === 'user_left') {
-      // Show notification for user leave
-      setMessages(prev => [...prev, {
-        id: 'leave-' + Date.now(),
-        roomId: room?.id || '',
-        userId: 'system',
-        encryptedMessage: '',
-        iv: '',
-        displayName: 'System',
-        timestamp: new Date().toISOString(),
-        decryptedMessage: `${wsMessage.displayName} left the room`,
-        isLeaveNotification: true
-      }]);
-      // Fetch updated user list
-      if (room) {
-        try {
-          const userRoom = rooms.find(r => r.roomId === room.id);
-          const wsUserId = userRoom?.userId || '';
-          const info = await getRoomInfo(room.id, wsUserId);
-          setRoomUsers(info.room.users || []);
-        } catch (error) {
-          console.error('Failed to update user list:', error);
-        }
-      }
-    }
-  }, []);
+    });
+  };
 
   const handleSelectRoom = async (room: UserRoom) => {
     try {
@@ -459,16 +409,10 @@ const App: React.FC = () => {
       setCurrentRoom(roomInfo.room);
       setRoomUsers(roomInfo.room.users || []);
 
-      // Connect to WebSocket with the stored userId
-      connectWebSocket(room.roomId, storedUserId, {
-        onMessage: handleWebSocketMessage
-      });
-
-      // Load messages
-      loadMessages(room.roomId);
+      // Start polling with stored credentials
+      startPollingForRoom(room.roomId, storedUserId, room.password, room.salt);
     } catch (error) {
       console.error('Error selecting room:', error);
-      // If room doesn't exist or user is not authorized, remove from state
       setUserRooms(userRooms.filter(r => r.roomId !== room.roomId));
     }
   };

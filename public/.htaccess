@@ -1,0 +1,16 @@
+# ShadowLink — Apache .htaccess for SPA + PHP API
+# Place this in the root directory of your hosting
+
+# Enable URL rewriting
+RewriteEngine On
+
+# If the request is for the /api/ directory, let PHP handle it
+RewriteRule ^api/ - [L]
+
+# If the request is for an existing file or directory, serve it directly
+RewriteCond %{REQUEST_FILENAME} -f [OR]
+RewriteCond %{REQUEST_FILENAME} -d
+RewriteRule ^ - [L]
+
+# Everything else goes to index.html (React SPA routing)
+RewriteRule ^ index.html [L]

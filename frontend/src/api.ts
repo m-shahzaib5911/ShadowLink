@@ -1,18 +1,15 @@
-// Use current origin for API base URL 
+// ShadowLink Frontend API Layer — PHP Backend with Polling
+// All API calls go to /api/*.php endpoints
+
+// Detect API base URL dynamically
 const getApiBaseUrl = (): string => {
   return `${window.location.origin}/api`;
 };
 
 const API_BASE_URL = getApiBaseUrl();
 
-// Generate a random salt
-const generateSalt = (): string => {
-  const array = new Uint8Array(16);
-  window.crypto.getRandomValues(array);
-  return Array.from(array, byte => byte.toString(16).padStart(2, '0')).join('');
-};
+// ==================== TYPES ====================
 
-// Room API
 interface Room {
   id: string;
   name: string;
@@ -22,261 +19,208 @@ interface Room {
   expiresAt: string;
 }
 
-interface RoomInfo {
+interface Message {
   id: string;
-  name: string;
-  salt: string;
-  userCount: number;
-  created: string;
+  roomId: string;
+  userId: string;
+  displayName: string;
+  encryptedMessage: string;
+  iv: string;
+  timestamp: string;
   expiresAt: string;
+  decryptedMessage?: string;
+  isJoinNotification?: boolean;
+  isLeaveNotification?: boolean;
 }
 
 interface UserRoom {
   roomId: string;
   roomName: string;
+  userId: string;
   password: string;
-  displayName: string;
   salt: string;
 }
 
-// Message API
-interface Message {
-  id: string;
-  roomId: string;
-  userId: string;
-  encryptedMessage: string;
-  iv: string;
-  displayName: string;
-  timestamp: string;
-}
-
-// User API
-// User API
 interface User {
   id: string;
   displayName: string;
 }
 
-// Create a new room
+// ==================== SALT GENERATION ====================
+
+export const generateSalt = (): string => {
+  const array = new Uint8Array(32);
+  crypto.getRandomValues(array);
+  return Array.from(array, byte => byte.toString(16).padStart(2, '0')).join('');
+};
+
+export const generateUserId = (): string => {
+  const array = new Uint8Array(8);
+  crypto.getRandomValues(array);
+  return 'user-' + Array.from(array, byte => byte.toString(36)).join('').substring(0, 10);
+};
+
+// ==================== ROOM API ====================
+
 export const createRoom = async (roomName: string, password: string, displayName: string, userId?: string): Promise<Room> => {
   try {
     const salt = generateSalt();
-    const response = await fetch(`${API_BASE_URL}/rooms/create`, {
+    const response = await fetch(`${API_BASE_URL}/rooms.php?action=create`, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         roomName,
         password,
         displayName,
         userId: userId || generateUserId(),
-        salt,
-      }),
+        salt
+      })
     });
 
-    if (!response.ok) {
-      throw new Error('Failed to create room');
-    }
-
     const data = await response.json();
+    if (!data.success) throw new Error(data.error || 'Failed to create room');
     return data.room;
   } catch (error) {
-    console.error('Error creating room:', error);
+    console.error('Create room error:', error);
     throw error;
   }
 };
 
-// Join a room
-export const joinRoom = async (roomId: string, password: string, displayName: string, userId?: string): Promise<RoomInfo> => {
+export const joinRoom = async (roomId: string, password: string, displayName: string, userId?: string): Promise<any> => {
   try {
-    const response = await fetch(`${API_BASE_URL}/rooms/${roomId}/join`, {
+    const response = await fetch(`${API_BASE_URL}/rooms.php?action=join&roomId=${encodeURIComponent(roomId)}`, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
+        roomId,
         userId: userId || generateUserId(),
         password,
-        displayName,
-      }),
+        displayName
+      })
     });
 
-    if (!response.ok) {
-      throw new Error('Failed to join room');
-    }
-
     const data = await response.json();
-    return data.roomInfo;
+    if (!data.success) throw new Error(data.error || 'Failed to join room');
+    return data;
   } catch (error) {
-    console.error('Error joining room:', error);
+    console.error('Join room error:', error);
     throw error;
   }
 };
 
-// Get room information
+export const leaveRoom = async (roomId: string, userId: string): Promise<any> => {
+  try {
+    const response = await fetch(`${API_BASE_URL}/rooms.php?action=leave&roomId=${encodeURIComponent(roomId)}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ roomId, userId })
+    });
+
+    const data = await response.json();
+    if (!data.success) throw new Error(data.error || 'Failed to leave room');
+    return data;
+  } catch (error) {
+    console.error('Leave room error:', error);
+    throw error;
+  }
+};
+
 export const getRoomInfo = async (roomId: string, userId: string): Promise<any> => {
   try {
-    const response = await fetch(`${API_BASE_URL}/rooms/${roomId}?userId=${userId}`, {
-      method: 'GET',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-    });
-
-    if (!response.ok) {
-      throw new Error('Failed to get room info');
-    }
-
-    return await response.json();
+    const response = await fetch(`${API_BASE_URL}/rooms.php?action=info&roomId=${encodeURIComponent(roomId)}&userId=${encodeURIComponent(userId)}`);
+    const data = await response.json();
+    if (!data.success) throw new Error(data.error || 'Failed to get room info');
+    return data;
   } catch (error) {
-    console.error('Error getting room info:', error);
+    console.error('Get room info error:', error);
     throw error;
   }
 };
 
-// Leave a room
-export const leaveRoom = async (roomId: string, userId: string): Promise<void> => {
+// ==================== MESSAGES API ====================
+
+export const sendMessage = async (roomId: string, userId: string, encryptedMessage: string, iv: string): Promise<any> => {
   try {
-    const response = await fetch(`${API_BASE_URL}/rooms/${roomId}/leave`, {
+    const response = await fetch(`${API_BASE_URL}/messages.php?action=send&roomId=${encodeURIComponent(roomId)}`, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        userId,
-      }),
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ roomId, userId, encryptedMessage, iv })
     });
-
-    if (!response.ok) {
-      throw new Error('Failed to leave room');
-    }
-  } catch (error) {
-    console.error('Error leaving room:', error);
-    throw error;
-  }
-};
-
-// Send a message
-export const sendMessage = async (roomId: string, userId: string, encryptedMessage: string, iv: string): Promise<Message> => {
-  try {
-    const response = await fetch(`${API_BASE_URL}/messages/${roomId}/send`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        userId,
-        encryptedMessage,
-        iv,
-      }),
-    });
-
-    if (!response.ok) {
-      throw new Error('Failed to send message');
-    }
 
     const data = await response.json();
-    return data.message;
+    if (!data.success) throw new Error(data.error || 'Failed to send message');
+    return data;
   } catch (error) {
-    console.error('Error sending message:', error);
+    console.error('Send message error:', error);
     throw error;
   }
 };
 
-// Get messages from a room
-export const getMessages = async (roomId: string, userId: string, since?: Date): Promise<Message[]> => {
+export const getMessages = async (roomId: string, userId: string, since?: string): Promise<any> => {
   try {
-    let url = `${API_BASE_URL}/messages/${roomId}?userId=${userId}`;
-    if (since) {
-      url += `&since=${since.toISOString()}`;
-    }
+    let url = `${API_BASE_URL}/messages.php?action=fetch&roomId=${encodeURIComponent(roomId)}&userId=${encodeURIComponent(userId)}`;
+    if (since) url += `&since=${encodeURIComponent(since)}`;
 
-    const response = await fetch(url, {
-      method: 'GET',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-    });
-
-    if (!response.ok) {
-      throw new Error('Failed to get messages');
-    }
-
+    const response = await fetch(url);
     const data = await response.json();
-    return data.messages;
+    if (!data.success) throw new Error(data.error || 'Failed to fetch messages');
+    return data;
   } catch (error) {
-    console.error('Error getting messages:', error);
+    console.error('Get messages error:', error);
     throw error;
   }
 };
 
-// Generate a unique user ID
-const generateUserId = (): string => {
-  return 'user-' + Math.random().toString(36).substr(2, 9);
-};
+// ==================== POLLING (replaces WebSocket) ====================
 
-// WebSocket connection
-let socket: WebSocket | null = null;
+let pollingInterval: NodeJS.Timeout | null = null;
+let lastMessageTimestamp: string | null = null;
 
-interface WebSocketMessage {
-  type: string;
-  message?: any;
+export interface PollingCallbacks {
+  onNewMessages?: (messages: Message[]) => void;
+  onUsersUpdate?: (users: User[]) => void;
+  onError?: (error: Error) => void;
 }
 
-interface WebSocketCallbacks {
-  onMessage?: (message: WebSocketMessage) => void;
-  onError?: (error: Event) => void;
-  onClose?: () => void;
-}
+export const startPolling = (roomId: string, userId: string, callbacks: PollingCallbacks = {}) => {
+  stopPolling(); // Clear any existing polling
+  lastMessageTimestamp = null;
 
-export const connectWebSocket = (
-  roomId: string,
-  userId: string,
-  callbacks: WebSocketCallbacks = {}
-): WebSocket => {
-  const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-  const wsUrl = `${wsProtocol}//${window.location.host}?roomId=${roomId}&userId=${userId}`;
-
-  socket = new WebSocket(wsUrl);
-
-  socket.onopen = () => {
-    console.log('WebSocket connected');
-  };
-
-  socket.onmessage = (event) => {
+  const poll = async () => {
     try {
-      const message: WebSocketMessage = JSON.parse(event.data);
-      if (callbacks.onMessage) {
-        callbacks.onMessage(message);
+      const data = await getMessages(roomId, userId, lastMessageTimestamp || undefined);
+
+      if (data.messages && data.messages.length > 0) {
+        // Update the timestamp to only get new messages next time
+        const lastMsg = data.messages[data.messages.length - 1];
+        lastMessageTimestamp = lastMsg.timestamp;
+
+        if (callbacks.onNewMessages) {
+          callbacks.onNewMessages(data.messages);
+        }
+      }
+
+      if (data.users && callbacks.onUsersUpdate) {
+        callbacks.onUsersUpdate(data.users);
       }
     } catch (error) {
-      console.error('Error parsing WebSocket message:', error);
+      if (callbacks.onError) {
+        callbacks.onError(error as Error);
+      }
     }
   };
 
-  socket.onerror = (error) => {
-    console.error('WebSocket error:', error);
-    if (callbacks.onError) {
-      callbacks.onError(error);
-    }
-  };
+  // Initial fetch (all messages)
+  poll();
 
-  socket.onclose = () => {
-    console.log('WebSocket disconnected');
-    if (callbacks.onClose) {
-      callbacks.onClose();
-    }
-  };
-
-  return socket;
+  // Poll every 2 seconds
+  pollingInterval = setInterval(poll, 2000);
 };
 
-export const disconnectWebSocket = (): void => {
-  if (socket) {
-    socket.close();
-    socket = null;
+export const stopPolling = () => {
+  if (pollingInterval) {
+    clearInterval(pollingInterval);
+    pollingInterval = null;
   }
+  lastMessageTimestamp = null;
 };
-
-// Room history is not saved - users start fresh on each session
